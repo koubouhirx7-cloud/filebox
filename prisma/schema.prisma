@@ -23,6 +23,7 @@ model Account {
   scope              String?
   id_token           String?
   session_state      String?
+  refresh_token_expires_in Int?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -47,6 +48,7 @@ model User {
   sessions      Session[]
   documents     Document[]
   folders       Folder[]
+  messages      Message[]
 }
 
 model VerificationToken {
@@ -75,8 +77,23 @@ model Folder {
   name          String
   userId        String
   driveFolderId String
+  paymentDeadline DateTime?
+  memo          String?
   createdAt     DateTime   @default(now())
   
   user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   documents     Document[]
+  messages      Message[]
+}
+
+model Message {
+  id        String   @id @default(cuid())
+  role      String   // "user" or "ai"
+  content   String
+  userId    String
+  folderId  String
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  folder    Folder   @relation(fields: [folderId], references: [id], onDelete: Cascade)
 }

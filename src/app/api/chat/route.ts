@@ -9,6 +9,34 @@ import os from "os";
 import path from "path";
 import crypto from "crypto";
 
+export async function GET(request: NextRequest) {
+    try {
+        const session = await getServerSession(authOptions);
+        if (!session || !session.user?.id) {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
+        const { searchParams } = new URL(request.url);
+        const folderId = searchParams.get("folderId");
+
+        if (!folderId) {
+            return NextResponse.json({ error: "Missing folderId" }, { status: 400 });
+        }
+
+        const messages = await prisma.message.findMany({
+            where: {
+                folderId,
+                userId: session.user.id
+            },
+            orderBy: { createdAt: "asc" }
+        });
+
+        return NextResponse.json({ messages });
+    } catch (error: any) {
+        return NextResponse.json({ error: error.message }, { status: 500 });
+    }
+}
+
 export async function POST(request: NextRequest) {
     const tempFiles: string[] = [];
     try {
@@ -25,11 +53,21 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Google Drive permission not granted. Please re-login." }, { status: 401 });
         }
 
-        const { message, documentIds } = await request.json();
+        const { message, documentIds, folderId } = await request.json();
 
-        if (!message || !documentIds || documentIds.length === 0) {
-            return NextResponse.json({ error: "Missing message or documents" }, { status: 400 });
+        if (!message || !documentIds || documentIds.length === 0 || !folderId) {
+            return NextResponse.json({ error: "Missing message, documents, or folderId" }, { status: 400 });
         }
+
+        // Save User Message
+        await prisma.message.create({
+            data: {
+                role: "user",
+                content: message,
+                userId: session.user.id,
+                folderId
+            }
+        });
 
         // 1. Fetch DB records
         const documents = await prisma.document.findMany({
@@ -91,6 +129,21 @@ export async function POST(request: NextRequest) {
         const result = await ai.models.generateContent({
             model: "gemini-3-flash-preview",
             contents: geminiContents,
+            config: {
+                systemInstruction: "あなたは優秀なデータ分析のプロフェッショナルです。提供された全てのソース（ファイルやドキュメント）を統合的に把握し、それらの情報を中心に多角的かつ論理的な回答を行ってください。ユーザーの質問に対して、ソースから必要なデータを的確に抽出し、データに忠実な分析結果を提供してください。ソースにない事柄への言及は最小限に留めてください。"
+            }
+        });
+
+        const replyText = result.text;
+
+        // Save AI Message
+        await prisma.message.create({
+            data: {
+                role: "ai",
+                content: replyText,
+                userId: session.user.id,
+                folderId
+            }
         });
 
         // Clean up local temp files
@@ -98,7 +151,7 @@ export async function POST(request: NextRequest) {
             try { await fs.unlink(tFile); } catch (e) { }
         }
 
-        return NextResponse.json({ reply: result.text });
+        return NextResponse.json({ reply: replyText });
 
     } catch (error: any) {
         console.error("Chat API Error:", error);
