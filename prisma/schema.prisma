@@ -77,13 +77,33 @@ model Folder {
   name          String
   userId        String
   driveFolderId String
-  paymentDeadline DateTime?
-  memo          String?
+  category      String?
   createdAt     DateTime   @default(now())
   
   user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   documents     Document[]
   messages      Message[]
+  memos         Memo[]
+  deadlines     PaymentDeadline[]
+}
+
+model Memo {
+  id        String   @id @default(cuid())
+  content   String
+  folderId  String
+  createdAt DateTime @default(now())
+  
+  folder    Folder   @relation(fields: [folderId], references: [id], onDelete: Cascade)
+}
+
+model PaymentDeadline {
+  id        String   @id @default(cuid())
+  title     String   @default("無題の支払い")
+  deadline  DateTime
+  folderId  String
+  createdAt DateTime @default(now())
+  
+  folder    Folder   @relation(fields: [folderId], references: [id], onDelete: Cascade)
 }
 
 model Message {

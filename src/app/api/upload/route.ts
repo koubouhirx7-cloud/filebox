@@ -55,8 +55,14 @@ export async function POST(request: NextRequest) {
 
         // 4. Upload to Google Drive using accessToken
         console.log("Uploading to Google Drive...");
-        const oauth2Client = new google.auth.OAuth2();
-        oauth2Client.setCredentials({ access_token: account.access_token });
+        const oauth2Client = new google.auth.OAuth2(
+            process.env.GOOGLE_CLIENT_ID,
+            process.env.GOOGLE_CLIENT_SECRET
+        );
+        oauth2Client.setCredentials({
+            access_token: account.access_token,
+            refresh_token: account.refresh_token
+        });
         const drive = google.drive({ version: "v3", auth: oauth2Client });
 
         // Find or create "File Box" root folder
@@ -135,10 +141,12 @@ export async function POST(request: NextRequest) {
         console.log("Uploading file to Gemini File API:", tempFilePath);
 
         // 7. Upload to Gemini File API
+        const cleanMimeType = file.type ? file.type.split(';')[0].trim() : "text/plain";
         const uploadResult = await ai.files.upload({
             file: tempFilePath,
             config: {
-                mimeType: file.type,
+                mimeType: cleanMimeType,
+                displayName: `file-${crypto.randomUUID()}`
             }
         });
 
@@ -150,7 +158,7 @@ export async function POST(request: NextRequest) {
             contents: [
                 {
                     fileData: {
-                        mimeType: uploadResult.mimeType || file.type,
+                        mimeType: uploadResult.mimeType || cleanMimeType,
                         fileUri: uploadResult.uri,
                     }
                 },

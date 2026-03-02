@@ -6,7 +6,7 @@ import { google } from "googleapis";
 
 export async function PUT(
     request: NextRequest,
-    { params }: { params: { id: string } }
+    { params }: { params: Promise<{ id: string }> }
 ) {
     try {
         const session = await getServerSession(authOptions);
@@ -14,9 +14,9 @@ export async function PUT(
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
         }
 
-        const { id } = params;
+        const { id } = await params;
         const body = await request.json();
-        const { folderName, memo, paymentDeadline } = body;
+        const { folderName, category } = body;
 
         // Verify folder exists and belongs to user
         const existingFolder = await prisma.folder.findUnique({
@@ -43,8 +43,14 @@ export async function PUT(
                 });
 
                 if (account && account.access_token) {
-                    const oauth2Client = new google.auth.OAuth2();
-                    oauth2Client.setCredentials({ access_token: account.access_token });
+                    const oauth2Client = new google.auth.OAuth2(
+                        process.env.GOOGLE_CLIENT_ID,
+                        process.env.GOOGLE_CLIENT_SECRET
+                    );
+                    oauth2Client.setCredentials({
+                        access_token: account.access_token,
+                        refresh_token: account.refresh_token
+                    });
                     const drive = google.drive({ version: "v3", auth: oauth2Client });
                     await drive.files.update({
                         fileId: existingFolder.driveFolderId,
@@ -54,8 +60,9 @@ export async function PUT(
             }
         }
 
-        if (memo !== undefined) dataToUpdate.memo = memo;
-        if (paymentDeadline !== undefined) dataToUpdate.paymentDeadline = paymentDeadline ? new Date(paymentDeadline) : null;
+        if (category !== undefined) {
+            dataToUpdate.category = category === "" ? null : category.trim();
+        }
 
         const updatedFolder = await prisma.folder.update({
             where: { id },

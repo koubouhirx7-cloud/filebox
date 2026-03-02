@@ -19,13 +19,18 @@ export default function Dashboard() {
     const [folders, setFolders] = useState<any[]>([]);
     const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set());
     const [isReloading, setIsReloading] = useState(false);
+    const [reloadTrigger, setReloadTrigger] = useState(0);
 
     // UI State
     const [activeFolder, setActiveFolder] = useState<any>(null);
+    const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+
+    const uniqueCategories = Array.from(new Set(folders.map(f => f.category).filter(Boolean))) as string[];
+    const filteredFolders = selectedCategory ? folders.filter(f => f.category === selectedCategory) : folders;
 
     const fetchDocuments = async () => {
         try {
-            const res = await fetch("/api/files");
+            const res = await fetch(`/api/files?t=${Date.now()}`, { cache: "no-store" });
             if (res.ok) {
                 const data = await res.json();
                 setDocuments(data.documents || []);
@@ -37,7 +42,7 @@ export default function Dashboard() {
 
     const fetchFolders = async () => {
         try {
-            const res = await fetch("/api/folders");
+            const res = await fetch(`/api/folders?t=${Date.now()}`, { cache: "no-store" });
             if (res.ok) {
                 const resData = await res.json();
                 setFolders(resData.folders || []);
@@ -49,7 +54,15 @@ export default function Dashboard() {
 
     const handleReload = async () => {
         setIsReloading(true);
+        if (activeFolder) {
+            try {
+                await fetch(`/api/chat?folderId=${activeFolder.id}`, { method: "DELETE" });
+            } catch (e) {
+                console.error("Failed to delete chat history", e);
+            }
+        }
         await Promise.all([fetchDocuments(), fetchFolders()]);
+        setReloadTrigger(prev => prev + 1);
         setIsReloading(false);
     };
 
@@ -57,6 +70,27 @@ export default function Dashboard() {
         fetchDocuments();
         fetchFolders();
     }, []);
+
+    // Auto-select all documents in the active folder when opened
+    useEffect(() => {
+        if (activeFolder) {
+            const folderDocs = documents.filter(d => d.folderId === activeFolder.id);
+            setSelectedDocs(new Set(folderDocs.map(d => d.id)));
+        } else {
+            setSelectedDocs(new Set());
+        }
+    }, [activeFolder, documents]);
+
+    // Keep activeFolder in sync with updated folders data
+    useEffect(() => {
+        if (activeFolder) {
+            const updated = folders.find(f => f.id === activeFolder.id);
+            if (updated) {
+                // Only update if references are different or data changed
+                setActiveFolder(updated);
+            }
+        }
+    }, [folders]);
 
     // Auto-select all documents in active folder
     useEffect(() => {
@@ -119,12 +153,15 @@ export default function Dashboard() {
         }
     };
 
-    const handleUpdateFolderMeta = async (id: string, updates: { memo?: string, paymentDeadline?: string | null }) => {
+    const handleUpdateCategory = async (id: string, currentCategory: string | null) => {
+        const newCategory = prompt("新しいカテゴリ名を入力してください（空欄で未分類になります）", currentCategory || "");
+        if (newCategory === null) return; // Cancelled
+
         try {
             const res = await fetch(`/api/folders/${id}`, {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(updates)
+                body: JSON.stringify({ category: newCategory })
             });
 
             if (res.ok) {
@@ -133,9 +170,69 @@ export default function Dashboard() {
                 if (activeFolder && activeFolder.id === id) {
                     setActiveFolder(data.folder);
                 }
+            } else {
+                const data = await res.json();
+                alert(`カテゴリの変更に失敗しました: ${data.error}`);
             }
         } catch (error) {
-            console.error("Failed to update folder meta", error);
+            console.error("Failed to update category", error);
+        }
+    };
+
+    const handleAddMemo = async (id: string, content: string) => {
+        if (!content.trim()) return;
+        try {
+            const res = await fetch(`/api/folders/${id}/memos`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ content })
+            });
+            if (res.ok) fetchFolders();
+        } catch (error) { console.error("Failed to add memo", error); }
+    };
+
+    const handleDeleteMemo = async (memoId: string) => {
+        try {
+            const res = await fetch(`/api/memos/${memoId}`, { method: "DELETE" });
+            if (res.ok) fetchFolders();
+        } catch (error) { console.error("Failed to delete memo", error); }
+    };
+
+    const handleAddDeadline = async (id: string, deadline: string, title?: string) => {
+        if (!deadline) return;
+        try {
+            const res = await fetch(`/api/folders/${id}/deadlines`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ deadline, title })
+            });
+            if (res.ok) fetchFolders();
+        } catch (error) { console.error("Failed to add deadline", error); }
+    };
+
+    const handleDeleteDeadline = async (deadlineId: string) => {
+        try {
+            const res = await fetch(`/api/deadlines/${deadlineId}`, { method: "DELETE" });
+            if (res.ok) fetchFolders();
+        } catch (error) { console.error("Failed to delete deadline", error); }
+    };
+
+    const handleDeleteDocument = async (documentId: string) => {
+        if (!confirm("本当にこのソースを削除してよろしいですか？")) return;
+        try {
+            const res = await fetch(`/api/files/${documentId}`, { method: "DELETE" });
+            if (res.ok) {
+                // Update local state without waiting for full reload
+                const newDocs = documents.filter(d => d.id !== documentId);
+                // Cannot directly set documents as it's passed as prop, so trigger a reload
+                fetchDocuments();
+                fetchFolders();
+            } else {
+                alert("削除に失敗しました。");
+            }
+        } catch (error) {
+            console.error("Failed to delete document", error);
+            alert("削除中にエラーが発生しました。");
         }
     };
 
@@ -149,12 +246,67 @@ export default function Dashboard() {
         setSelectedDocs(newSelected);
     };
 
+    // Calculate overall upcoming deadlines
+    const upcomingDeadlines = folders
+        .flatMap(f => (f.deadlines || []).map((d: any) => ({ ...d, folderName: f.name, folderId: f.id })))
+        .sort((a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime())
+        .slice(0, 5);
+
     // HOME VIEW (Notebook Grid)
     if (!activeFolder) {
         return (
             <div className="w-full text-left space-y-8 max-w-6xl mx-auto">
-                <div className="flex items-center justify-between mb-8">
-                    <h2 className="text-2xl md:text-3xl font-bold text-gray-800">最近のノートブック</h2>
+
+                {/* Global Upcoming Deadlines Section */}
+                <div className="mb-10 bg-white/60 p-5 rounded-3xl border border-red-100 shadow-sm">
+                    <div className="flex items-center gap-2 mb-4">
+                        <span className="flex items-center justify-center w-8 h-8 rounded-full bg-red-100 text-red-600">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                        </span>
+                        <h2 className="text-xl font-bold text-gray-800">直近の支払い期日</h2>
+                    </div>
+                    {upcomingDeadlines.length > 0 ? (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                            {upcomingDeadlines.map((dl: any) => (
+                                <div key={dl.id} onClick={() => setActiveFolder(folders.find(f => f.id === dl.folderId))} className="cursor-pointer bg-white p-3 rounded-2xl border border-red-100 shadow-sm hover:shadow-md hover:border-red-300 transition-all flex flex-col group">
+                                    <div className="flex items-center justify-between mb-1">
+                                        <span className="text-xs font-bold text-red-600 bg-red-50 px-2 py-0.5 rounded-full">{dl.title}</span>
+                                        <span className="text-xs font-medium text-gray-500">{new Date(dl.deadline).toLocaleDateString("ja-JP")}</span>
+                                    </div>
+                                    <span className="text-sm font-semibold text-gray-800 truncate group-hover:text-red-700 transition-colors">📂 {dl.folderName}</span>
+                                </div>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="text-sm text-gray-500 italic px-2">直近（設定済み）の支払い期日はありません。</div>
+                    )}
+                </div>
+
+                <div className="flex flex-col md:flex-row items-start md:items-center justify-between mb-8 gap-4">
+                    <h2 className="text-2xl md:text-3xl font-bold text-gray-800">すべてのノートブック</h2>
+
+                    {/* Category Filter */}
+                    {uniqueCategories.length > 0 ? (
+                        <div className="flex flex-wrap gap-2">
+                            <button
+                                onClick={() => setSelectedCategory(null)}
+                                className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${selectedCategory === null ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
+                            >
+                                すべて
+                            </button>
+                            {uniqueCategories.map(cat => (
+                                <button
+                                    key={cat}
+                                    onClick={() => setSelectedCategory(cat)}
+                                    className={`px-4 py-1.5 rounded-full text-sm font-medium transition-colors ${selectedCategory === cat ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-gray-600 border border-gray-200 hover:bg-gray-50'}`}
+                                >
+                                    {cat}
+                                </button>
+                            ))}
+                        </div>
+                    ) : (
+                        <div className="text-xs text-gray-400">📝 各ノートブックからカテゴリを設定すると、ここに絞り込みタブが出現します。</div>
+                    )}
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -173,7 +325,7 @@ export default function Dashboard() {
                     </div>
 
                     {/* Folder Cards */}
-                    {folders.map((folder, i) => {
+                    {filteredFolders.map((folder, i) => {
                         const count = documents.filter(d => d.folderId === folder.id).length;
                         const bgColor = PASTEL_COLORS[i % PASTEL_COLORS.length];
 
@@ -205,8 +357,31 @@ export default function Dashboard() {
 
                                 <h3 className="font-bold text-xl text-gray-900 mt-2 line-clamp-2 leading-tight">{folder.name}</h3>
 
-                                <div className="mt-auto text-sm font-medium text-gray-600 flex items-center bg-white/50 w-fit px-3 py-1 rounded-full">
-                                    {count} 個のソース
+                                {folder.category && (
+                                    <div className="mt-1 flex items-center space-x-1 text-xs font-semibold text-gray-600/80">
+                                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                                        </svg>
+                                        <span>{folder.category}</span>
+                                    </div>
+                                )}
+
+                                <div className="mt-auto pt-3">
+
+
+                                    {/* Previews for deadlines/memos */}
+                                    <div className="flex flex-col gap-1 mb-3 max-h-16 overflow-hidden">
+                                        {folder.deadlines && folder.deadlines.length > 0 && (
+                                            <div className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded-md line-clamp-1 font-medium border border-red-200" title={folder.deadlines[0].title}>
+                                                🗓 {folder.deadlines[0].title} ({new Date(folder.deadlines[0].deadline).toLocaleDateString("ja-JP")}) {folder.deadlines.length > 1 ? `他${folder.deadlines.length - 1}件` : ''}
+                                            </div>
+                                        )}
+                                        {folder.memos && folder.memos.length > 0 && (
+                                            <div className="text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded-md line-clamp-1 border border-amber-200">
+                                                📝 {folder.memos[0].content}
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                         );
@@ -218,9 +393,9 @@ export default function Dashboard() {
 
     // WORKSPACE VIEW (Chat & Sources)
     return (
-        <div className="w-full flex flex-col md:flex-row gap-6 max-w-7xl mx-auto" style={{ height: "calc(100vh - 12rem)" }}>
-            {/* Left Sidebar (Sources) */}
-            <div className="w-full md:w-80 lg:w-96 flex flex-col bg-gray-50/50 rounded-3xl p-5 shadow-sm border border-gray-100 h-[600px] md:h-full">
+        <div className="w-full flex flex-col md:flex-row gap-6 max-w-[95rem] mx-auto" style={{ height: "calc(100vh - 12rem)" }}>
+            {/* Column 1: Metadata (Deadlines, Memos, Category) */}
+            <div className="w-full md:w-72 lg:w-80 flex flex-col bg-gray-50/50 rounded-3xl p-5 shadow-sm border border-gray-100 h-[600px] md:h-full overflow-y-auto">
                 <button
                     onClick={() => { setActiveFolder(null); setSelectedDocs(new Set()); }}
                     className="flex items-center text-sm text-gray-500 hover:text-gray-800 mb-6 transition-colors w-fit bg-white px-3 py-1.5 rounded-full shadow-sm border border-gray-100"
@@ -229,46 +404,130 @@ export default function Dashboard() {
                     ノートブック一覧
                 </button>
 
-                <div className="flex items-center justify-between mb-6 px-1 group text-left">
-                    <h2 className="font-bold text-2xl text-gray-900 flex items-center leading-tight">
+                <div className="flex flex-col items-start gap-4 mb-6 px-1 text-left w-full">
+                    <h2 className="font-bold text-2xl text-gray-900 flex items-center leading-tight break-all">
                         <span className="mr-2 text-3xl flex-shrink-0">{getEmojiForTitle(activeFolder.name)}</span>
                         {activeFolder.name}
                     </h2>
-                    <button
-                        onClick={() => handleRenameFolder(activeFolder.id, activeFolder.name)}
-                        className="opacity-0 group-hover:opacity-100 p-2 text-gray-400 hover:text-indigo-600 hover:bg-white rounded-full transition-all"
-                        title="ノートブック名を変更"
-                    >
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                        </svg>
-                    </button>
+                    <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-full shadow-sm border border-gray-100 self-start">
+                        <button
+                            onClick={() => handleUpdateCategory(activeFolder.id, activeFolder.category)}
+                            className="p-1.5 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-colors flex items-center gap-1 px-3"
+                            title="カテゴリを設定"
+                        >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                            </svg>
+                            <span className="text-xs font-semibold">{activeFolder.category ? 'カテゴリ変更' : 'カテゴリ追加'}</span>
+                        </button>
+                        <div className="w-px h-5 bg-gray-200" />
+                        <button
+                            onClick={() => handleRenameFolder(activeFolder.id, activeFolder.name)}
+                            className="p-1.5 text-gray-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-colors"
+                            title="ノートブック名を変更"
+                        >
+                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                            </svg>
+                        </button>
+                    </div>
                 </div>
 
-                {/* Payment Memo Section */}
-                <div className="mb-6 p-4 bg-amber-50 rounded-2xl border border-amber-100 shadow-inner space-y-3">
-                    <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-amber-700 uppercase tracking-wider flex items-center">
-                            <svg className="w-3.5 h-3.5 mr-1" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" /></svg>
-                            支払い期日メモ
+                {/* Category Badge if exists */}
+                {activeFolder.category && (
+                    <div className="mb-6 px-1 flex">
+                        <span className="px-3 py-1 bg-indigo-50 border border-indigo-100 text-indigo-700 text-xs font-bold rounded-full flex items-center shadow-sm">
+                            <svg className="w-3 h-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                            </svg>
+                            {activeFolder.category}
                         </span>
                     </div>
+                )}
 
-                    <div className="space-y-2 text-left">
-                        <input
-                            type="date"
-                            value={activeFolder.paymentDeadline ? new Date(activeFolder.paymentDeadline).toISOString().split('T')[0] : ""}
-                            onChange={(e) => handleUpdateFolderMeta(activeFolder.id, { paymentDeadline: e.target.value || null })}
-                            className="text-sm bg-white border border-amber-200 rounded-lg px-2 py-1 text-amber-900 focus:outline-none focus:ring-1 focus:ring-amber-400 w-full"
-                        />
-                        <textarea
-                            placeholder="メモを入力..."
-                            value={activeFolder.memo || ""}
-                            onChange={(e) => handleUpdateFolderMeta(activeFolder.id, { memo: e.target.value })}
-                            className="w-full text-sm bg-white border border-amber-200 rounded-lg px-3 py-2 text-amber-900 placeholder-amber-300 focus:outline-none focus:ring-1 focus:ring-amber-400 h-20 resize-none shadow-sm"
-                        />
+                {/* Payment Memo & Deadline Section */}
+                <div className="mb-6 p-4 bg-amber-50 rounded-2xl border border-amber-100 shadow-inner space-y-4">
+
+                    {/* Deadlines List */}
+                    <div>
+                        <span className="text-xs font-bold text-red-700 uppercase tracking-wider flex items-center mb-2">
+                            <svg className="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                            支払い期日
+                        </span>
+                        <div className="space-y-1 mb-2">
+                            {activeFolder.deadlines?.map((dl: any) => (
+                                <div key={dl.id} className="flex justify-between items-center text-sm bg-white border border-red-200 rounded px-2 py-1 text-red-900 group">
+                                    <span className="flex gap-2">
+                                        <span className="font-semibold text-xs bg-red-50 text-red-700 px-1.5 rounded">{dl.title}</span>
+                                        <span>{new Date(dl.deadline).toLocaleDateString("ja-JP")}</span>
+                                    </span>
+                                    <button onClick={() => handleDeleteDeadline(dl.id)} className="text-red-300 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity">✕</button>
+                                </div>
+                            ))}
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                            <input
+                                type="text"
+                                id="new-deadline-title"
+                                placeholder="タイトル (例: 月額サーバー代)"
+                                className="w-full text-xs bg-white border border-red-200 rounded px-2 py-1.5 text-red-900 focus:outline-none focus:ring-1 focus:ring-red-400 placeholder-red-300"
+                            />
+                            <div className="flex items-center gap-2">
+                                <input
+                                    type="date"
+                                    id="new-deadline"
+                                    className="flex-1 text-xs bg-white border border-red-200 rounded px-2 py-1 text-red-900 focus:outline-none focus:ring-1 focus:ring-red-400"
+                                />
+                                <button
+                                    onClick={() => {
+                                        const titInput = document.getElementById('new-deadline-title') as HTMLInputElement;
+                                        const input = document.getElementById('new-deadline') as HTMLInputElement;
+                                        handleAddDeadline(activeFolder.id, input.value, titInput.value);
+                                        titInput.value = '';
+                                        input.value = '';
+                                    }}
+                                    className="text-xs bg-red-100 hover:bg-red-200 text-red-800 px-2 py-1 rounded font-medium transition-colors border border-red-200"
+                                >追加</button>
+                            </div>
+                        </div>
                     </div>
+
+                    {/* Memos List */}
+                    <div className="pt-3 border-t border-amber-200/50">
+                        <span className="text-xs font-bold text-amber-700 uppercase tracking-wider flex items-center mb-2">
+                            <svg className="w-3.5 h-3.5 mr-1" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" /></svg>
+                            メモ
+                        </span>
+                        <div className="space-y-1 mb-2">
+                            {activeFolder.memos?.map((memo: any) => (
+                                <div key={memo.id} className="flex justify-between items-start text-xs bg-white border border-amber-200 rounded px-2 py-1.5 text-amber-900 group">
+                                    <span className="whitespace-pre-wrap">{memo.content}</span>
+                                    <button onClick={() => handleDeleteMemo(memo.id)} className="text-amber-300 hover:text-amber-600 opacity-0 group-hover:opacity-100 transition-opacity ml-2">✕</button>
+                                </div>
+                            ))}
+                        </div>
+                        <div className="flex flex-col gap-2">
+                            <textarea
+                                id="new-memo"
+                                placeholder="メモを入力..."
+                                className="w-full text-xs bg-white border border-amber-200 rounded px-2 py-1.5 text-amber-900 placeholder-amber-300 focus:outline-none focus:ring-1 focus:ring-amber-400 h-10 resize-none shadow-sm"
+                            />
+                            <button
+                                onClick={() => {
+                                    const input = document.getElementById('new-memo') as HTMLTextAreaElement;
+                                    handleAddMemo(activeFolder.id, input.value);
+                                    input.value = '';
+                                }}
+                                className="self-end text-xs bg-amber-100 hover:bg-amber-200 text-amber-800 px-3 py-1 rounded font-medium transition-colors border border-amber-200"
+                            >追加</button>
+                        </div>
+                    </div>
+
                 </div>
+            </div>
+
+            {/* Column 2: Sources Panel */}
+            <div className="w-full md:w-72 lg:w-80 flex flex-col bg-gray-50/50 rounded-3xl p-5 shadow-sm border border-gray-100 h-[600px] md:h-full">
 
                 <div className="flex items-center justify-between mb-4 px-1">
                     <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">ソース一覧</h3>
@@ -289,6 +548,7 @@ export default function Dashboard() {
                         folders={[]}
                         selectedDocs={selectedDocs}
                         onToggleSelection={toggleDocumentSelection}
+                        onDeleteDocument={handleDeleteDocument}
                     />
                 </div>
 
@@ -300,11 +560,13 @@ export default function Dashboard() {
                 </div>
             </div>
 
-            {/* Right Main Area (Chat) */}
-            <div className="flex-1 flex flex-col h-[700px] md:h-full bg-white rounded-3xl shadow-sm border border-gray-100 p-2 md:p-4">
+            {/* Column 3: Main Area (Chat) */}
+            <div className="flex-1 flex flex-col h-[700px] md:h-full bg-white rounded-3xl shadow-sm border border-gray-100 p-2 md:p-4 min-w-[300px]">
                 <ChatInterface
                     selectedDocs={Array.from(selectedDocs)}
+                    selectedDocNames={Array.from(selectedDocs).map(id => documents.find(d => d.id === id)?.filename || "名称未設定")}
                     folderId={activeFolder.id}
+                    reloadTrigger={reloadTrigger}
                 />
             </div>
         </div>

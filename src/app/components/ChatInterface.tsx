@@ -3,16 +3,21 @@ import { useState, useEffect } from "react";
 
 interface ChatInterfaceProps {
     selectedDocs: string[];
+    selectedDocNames?: string[];
     folderId: string;
+    reloadTrigger?: number;
 }
 
-export default function ChatInterface({ selectedDocs, folderId }: ChatInterfaceProps) {
+export default function ChatInterface({ selectedDocs, selectedDocNames = [], folderId, reloadTrigger = 0 }: ChatInterfaceProps) {
     const [input, setInput] = useState("");
     const [messages, setMessages] = useState<{ role: "user" | "ai"; content: string }[]>([]);
     const [isLoading, setIsLoading] = useState(false);
 
+    const [isHistoryLoaded, setIsHistoryLoaded] = useState(false);
+
     // Fetch history
     useEffect(() => {
+        setIsHistoryLoaded(false);
         const fetchHistory = async () => {
             try {
                 const res = await fetch(`/api/chat?folderId=${folderId}`);
@@ -22,10 +27,48 @@ export default function ChatInterface({ selectedDocs, folderId }: ChatInterfaceP
                 }
             } catch (e) {
                 console.error("Failed to fetch chat history", e);
+            } finally {
+                setIsHistoryLoaded(true);
             }
         };
         if (folderId) fetchHistory();
-    }, [folderId]);
+    }, [folderId, reloadTrigger]);
+
+    // Auto Summary Request
+    useEffect(() => {
+        const triggerInitialSummary = async () => {
+            if (isHistoryLoaded && messages.length === 0 && selectedDocs.length > 0) {
+                setIsLoading(true);
+                setMessages([{ role: "ai", content: "ソースを読み込んで全体の概要とおすすめの質問を作成しています..." }]);
+
+                try {
+                    const res = await fetch("/api/chat", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            message: "INITIAL_REQUEST",
+                            documentIds: selectedDocs,
+                            folderId: folderId,
+                            isInitialRequest: true
+                        }),
+                    });
+
+                    const data = await res.json();
+                    if (res.ok) {
+                        setMessages([{ role: "ai", content: data.reply }]);
+                    } else {
+                        setMessages([{ role: "ai", content: `❌ エラー: ${data.error}` }]);
+                    }
+                } catch (e: any) {
+                    setMessages([{ role: "ai", content: `❌ 通信エラーが発生しました` }]);
+                } finally {
+                    setIsLoading(false);
+                }
+            }
+        };
+
+        triggerInitialSummary();
+    }, [isHistoryLoaded, messages.length, selectedDocs, folderId]);
 
     const handleSend = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -47,17 +90,63 @@ export default function ChatInterface({ selectedDocs, folderId }: ChatInterfaceP
                 }),
             });
 
-            const data = await res.json();
-            if (res.ok) {
-                setMessages((prev) => [...prev, { role: "ai", content: data.reply }]);
-            } else {
-                setMessages((prev) => [...prev, { role: "ai", content: `❌ エラー: ${data.error}` }]);
+            if (!res.ok) {
+                const errorData = await res.json();
+                let displayError = errorData.error || "チャットサーバーでエラーが発生しました。";
+
+                // Handle Gemini 503 Error gracefully
+                if (typeof displayError === 'string' && displayError.includes('503') && displayError.includes('high demand')) {
+                    displayError = "現在Gemini APIが大変混み合っており、回答を生成できません（503エラー）。恐れ入りますが、数分経ってから再度リロードしてお試しください。";
+                } else if (typeof displayError === 'object') {
+                    displayError = JSON.stringify(displayError);
+                    if (displayError.includes('503') || displayError.includes('high demand')) {
+                        displayError = "現在Gemini APIが大変混み合っており、回答を生成できません。恐れ入りますが、数分経ってから再度リロードしてお試しください。";
+                    }
+                }
+
+                setMessages(prev => [...prev, { role: "ai", content: `❌ エラー: ${displayError}` }]);
+                return;
             }
+            const data = await res.json();
+            setMessages((prev) => [...prev, { role: "ai", content: data.reply }]);
         } catch (e: any) {
             setMessages((prev) => [...prev, { role: "ai", content: `❌ 通信エラーが発生しました` }]);
         } finally {
             setIsLoading(false);
         }
+    };
+
+    const handleSuggestionClick = (suggestion: string) => {
+        setInput(suggestion);
+        setTimeout(() => {
+            const form = document.getElementById("chat-form") as HTMLFormElement;
+            if (form) form.requestSubmit();
+        }, 50);
+    };
+
+    const renderMessageContent = (content: string) => {
+        const lines = content.split('\n');
+        return (
+            <div className="space-y-1">
+                {lines.map((line, i) => {
+                    const match = line.match(/^[-*]\s*おすすめ:\s*(.+)/);
+                    if (match) {
+                        const suggestion = match[1].replace(/^「|」$/g, ''); // strip quotes if any
+                        return (
+                            <button
+                                key={i}
+                                onClick={() => handleSuggestionClick(suggestion)}
+                                className="block w-full text-left bg-white border border-indigo-200 text-indigo-700 hover:bg-indigo-50 hover:border-indigo-300 px-4 py-2 rounded-xl text-sm transition-colors mt-2 mb-1 shadow-sm"
+                            >
+                                <span className="font-bold mr-2">✨</span>
+                                {suggestion}
+                            </button>
+                        );
+                    }
+                    return <p key={i} className="min-h-[1rem]">{line}</p>;
+                })}
+            </div>
+        );
     };
 
     return (
@@ -73,7 +162,10 @@ export default function ChatInterface({ selectedDocs, folderId }: ChatInterfaceP
                             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
                             <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
                         </span>
-                        {selectedDocs.length}個のソースを分析中
+                        <span className="truncate max-w-[150px] md:max-w-xs block">
+                            {selectedDocNames.length > 0 ? selectedDocNames.join(', ') : `${selectedDocs.length}個のソース`}
+                        </span>
+                        <span className="ml-1 flex-shrink-0">を分析中</span>
                     </div>
                 )}
             </h2>
@@ -92,7 +184,7 @@ export default function ChatInterface({ selectedDocs, folderId }: ChatInterfaceP
                     messages.map((msg, idx) => (
                         <div key={idx} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"} px-1 md:px-2`}>
                             <div className={`max-w-[85%] md:max-w-[75%] px-4 py-2.5 md:py-3 rounded-2xl text-sm md:text-base shadow-sm ${msg.role === "user" ? "bg-indigo-600 text-white rounded-tr-sm" : "bg-gray-100 border border-gray-200 text-gray-800 rounded-tl-sm whitespace-pre-wrap"}`}>
-                                {msg.content}
+                                {msg.role === "ai" ? renderMessageContent(msg.content) : msg.content}
                             </div>
                         </div>
                     ))
@@ -108,7 +200,7 @@ export default function ChatInterface({ selectedDocs, folderId }: ChatInterfaceP
                 )}
             </div>
 
-            <form onSubmit={handleSend} className="mt-auto relative group flex items-center bg-gray-100 rounded-full pr-1 shadow-inner focus-within:ring-2 focus-within:ring-indigo-200 focus-within:bg-white transition-all">
+            <form id="chat-form" onSubmit={handleSend} className="mt-auto relative group flex items-center bg-gray-100 rounded-full pr-1 shadow-inner focus-within:ring-2 focus-within:ring-indigo-200 focus-within:bg-white transition-all">
                 <input
                     type="text"
                     value={input}

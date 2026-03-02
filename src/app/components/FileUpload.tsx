@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 interface FileUploadProps {
     onUploadSuccess?: () => void;
@@ -11,6 +11,13 @@ export default function FileUpload({ onUploadSuccess, folders = [] }: FileUpload
     const [selectedFolderId, setSelectedFolderId] = useState<string>(folders.length === 1 ? folders[0].id : "null");
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    // Sync folder ID when switching views
+    useEffect(() => {
+        if (folders.length === 1) {
+            setSelectedFolderId(folders[0].id);
+        }
+    }, [folders]);
 
     const handleUpload = async (e: React.FormEvent) => {
         e.preventDefault();

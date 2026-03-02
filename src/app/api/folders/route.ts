@@ -20,6 +20,8 @@ export async function GET(request: NextRequest) {
                 createdAt: "desc",
             },
             include: {
+                memos: true,
+                deadlines: true,
                 _count: {
                     select: { documents: true }
                 }
@@ -57,8 +59,14 @@ export async function POST(request: NextRequest) {
         }
 
         // 1. Create Folder in Google Drive (Inside "File Box" root)
-        const oauth2Client = new google.auth.OAuth2();
-        oauth2Client.setCredentials({ access_token: account.access_token });
+        const oauth2Client = new google.auth.OAuth2(
+            process.env.GOOGLE_CLIENT_ID,
+            process.env.GOOGLE_CLIENT_SECRET
+        );
+        oauth2Client.setCredentials({
+            access_token: account.access_token,
+            refresh_token: account.refresh_token
+        });
         const drive = google.drive({ version: "v3", auth: oauth2Client });
 
         // Find root "File Box" folder first
