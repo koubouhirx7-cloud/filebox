@@ -87,8 +87,13 @@ export async function POST(request: NextRequest) {
         const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
         const geminiContents: any[] = [];
 
-        // 4. Download files from Drive and Upload to Gemini in parallel
-        const uploadPromises = documents.map(async (doc) => {
+        // 4. Download files from Drive and Upload to Gemini sequentially with a delay
+        const uploadResults = [];
+        const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+        for (let i = 0; i < documents.length; i++) {
+            const doc = documents[i];
+
             // Avoid Japanese characters in tempPath to prevent Gemini SDK ByteString error
             const ext = path.extname(doc.filename);
             const tempPath = path.join(os.tmpdir(), `${crypto.randomUUID()}${ext}`);
@@ -104,7 +109,7 @@ export async function POST(request: NextRequest) {
             await fs.writeFile(tempPath, buffer);
 
             // Upload to Gemini
-            console.log(`Uploading ${doc.filename} to Gemini...`);
+            console.log(`Uploading ${doc.filename} to Gemini... (File ${i + 1}/${documents.length})`);
 
             // Strictly sanitize mimeType to prevent ByteString errors from Japanese chars in parameters
             const cleanMimeType = doc.mimeType ? doc.mimeType.split(';')[0].trim() : "text/plain";
@@ -117,16 +122,20 @@ export async function POST(request: NextRequest) {
                 },
             });
 
-            return {
+            uploadResults.push({
                 fileData: {
                     mimeType: cleanMimeType,
                     fileUri: uploadResult.uri,
                 },
                 filenameMessage: `(上記のファイルは「${doc.filename}」という名前のファイルです)`
-            };
-        });
+            });
 
-        const uploadResults = await Promise.all(uploadPromises);
+            // Throttle consecutive uploads to prevent Gemini 20 RPM Free Tier Limit
+            if (i < documents.length - 1) {
+                console.log("Sleeping 7 seconds to respect rate limits...");
+                await sleep(7000);
+            }
+        }
 
         for (const result of uploadResults) {
             geminiContents.push({ fileData: result.fileData });

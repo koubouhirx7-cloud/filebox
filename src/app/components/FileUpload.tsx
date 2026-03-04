@@ -53,10 +53,10 @@ export default function FileUpload({ onUploadSuccess, folders = [] }: FileUpload
 
                 successCount++;
 
-                // Throttling: To prevent Gemini API Rate Limits (15 RPM free tier)
-                // Wait 4 seconds between files if we have multiple
+                // Throttling: To prevent Gemini API Rate Limits (20 RPM free tier)
+                // Wait 7 seconds between files if we have multiple
                 if (analyzeOnUpload && i < files.length - 1) {
-                    await sleep(4000);
+                    await sleep(7000);
                 }
             }
 
