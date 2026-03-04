@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
         }
 
         const data = await request.json();
-        const { partnerName, issueDate, amount, description, taxRate } = data;
+        const { partnerName, issueDate, amount, description, taxRate, dealType = "expense", settlementStatus = "unsettled" } = data;
 
         if (!issueDate || !amount) {
             return NextResponse.json({ error: "Missing required fields (date, amount)" }, { status: 400 });
@@ -31,30 +31,38 @@ export async function POST(request: NextRequest) {
             "Content-Type": "application/json"
         };
 
-        // 2. Get Company ID
-        // In a real app we might cache this, but for prototype we fetch on the fly
-        const meRes = await fetch("https://api.freee.co.jp/api/1/users/me", { headers });
-        if (!meRes.ok) {
-            const err = await meRes.text();
-            console.error("Failed to fetch user:", err);
+        // 2. Get Company ID reliably
+        const companiesRes = await fetch("https://api.freee.co.jp/api/1/companies", { headers });
+        if (!companiesRes.ok) {
+            const err = await companiesRes.text();
+            console.error("Failed to fetch companies:", err);
             return NextResponse.json({ error: "Failed to fetch freee company info" }, { status: 500 });
         }
-        const meData = await meRes.json();
-        const companyId = meData.user?.companies?.[0]?.id;
+        const companiesData = await companiesRes.json();
+        const companyId = companiesData.companies?.[0]?.id;
 
         if (!companyId) {
             return NextResponse.json({ error: "No company found for this freee account" }, { status: 400 });
         }
 
-        // 3. Fetch Account Items to find a default expense account (e.g., 消耗品費 or 雑費 or just first expense)
+        // 3. Fetch Account Items to find a default account
         const accountItemsRes = await fetch(`https://api.freee.co.jp/api/1/account_items?company_id=${companyId}`, { headers });
         if (!accountItemsRes.ok) throw new Error("Failed to fetch account items");
         const accountItemsData = await accountItemsRes.json();
-        const expenseItems = accountItemsData.account_items.filter((item: any) => item.account_category === "expense" || item.account_category === "cost");
-        const accountItemId = expenseItems.length > 0 ? expenseItems[0].id : null;
+
+        let accountItemId = null;
+        if (dealType === "income") {
+            const incomeItems = accountItemsData.account_items.filter((item: any) => item.account_category === "income");
+            const salesItem = incomeItems.find((i: any) => i.name.includes("売上高"));
+            accountItemId = salesItem ? salesItem.id : (incomeItems.length > 0 ? incomeItems[0].id : null);
+        } else {
+            const expenseItems = accountItemsData.account_items.filter((item: any) => item.account_category === "expense" || item.account_category === "cost");
+            const consItem = expenseItems.find((i: any) => i.name.includes("消耗品費"));
+            accountItemId = consItem ? consItem.id : (expenseItems.length > 0 ? expenseItems[0].id : null);
+        }
 
         if (!accountItemId) {
-            return NextResponse.json({ error: "No default expense account item found in freee" }, { status: 400 });
+            return NextResponse.json({ error: "No default account item found in freee" }, { status: 400 });
         }
 
         // 4. Fetch Tax Codes to find the matching tax code
@@ -67,7 +75,7 @@ export async function POST(request: NextRequest) {
 
         // Very basic matching based on name and rate (simplified for prototype)
         // Freee taxes list is complex (課税仕入, etc). We will look for 課税仕入 string and matching rate.
-        const expenseTaxes = taxesData.taxes.filter((t: any) => t.name.includes("課税仕入") || t.name.includes("対象外"));
+        const expenseTaxes = taxesData.taxes.filter((t: any) => dealType === "income" ? (t.name.includes("課税売上") || t.name.includes("対象外")) : (t.name.includes("課税仕入") || t.name.includes("対象外")));
         for (const t of expenseTaxes) {
             if (targetRate === 10 && t.name.includes("10%")) targetTaxCode = t.code;
             if (targetRate === 8 && t.name.includes("8%")) targetTaxCode = t.code;
@@ -76,10 +84,10 @@ export async function POST(request: NextRequest) {
         // Fallback to first code if not found
         if (!targetTaxCode && expenseTaxes.length > 0) targetTaxCode = expenseTaxes[0].code;
 
-        // 5. Create Deal (未決済取引)
-        const dealPayload = {
+        // 5. Create Deal (未決済 or 決済済)
+        const dealPayload: any = {
             issue_date: issueDate,
-            type: "expense",
+            type: dealType,
             company_id: companyId,
             due_amount: parseInt(amount, 10),
             details: [
@@ -91,6 +99,43 @@ export async function POST(request: NextRequest) {
                 }
             ]
         };
+
+        if (settlementStatus === "settled") {
+            const walletsRes = await fetch(`https://api.freee.co.jp/api/1/walletables?company_id=${companyId}`, { headers });
+            let paymentWalletableId = null;
+            let paymentWalletableType = "bank_account";
+
+            if (walletsRes.ok) {
+                const walletsData = await walletsRes.json();
+                const wallets = walletsData.walletables || [];
+                const cashWallet = wallets.find((w: any) => w.type === "cash");
+                const bankWallet = wallets.find((w: any) => w.type === "bank_account");
+
+                if (cashWallet) {
+                    paymentWalletableId = cashWallet.id;
+                    paymentWalletableType = cashWallet.type;
+                } else if (bankWallet) {
+                    paymentWalletableId = bankWallet.id;
+                    paymentWalletableType = bankWallet.type;
+                } else if (wallets.length > 0) {
+                    paymentWalletableId = wallets[0].id;
+                    paymentWalletableType = wallets[0].type;
+                }
+            }
+
+            if (paymentWalletableId) {
+                dealPayload.payments = [
+                    {
+                        amount: parseInt(amount, 10),
+                        date: issueDate,
+                        from_walletable_type: paymentWalletableType,
+                        from_walletable_id: paymentWalletableId
+                    }
+                ];
+            } else {
+                console.warn("No walletable found for settled payment, registering as unsettled");
+            }
+        }
 
         const dealsRes = await fetch("https://api.freee.co.jp/api/1/deals", {
             method: "POST",

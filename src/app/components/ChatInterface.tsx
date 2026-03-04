@@ -125,7 +125,11 @@ export default function ChatInterface({ selectedDocs, selectedDocNames = [], fol
     };
 
     function FreeeRegistrationCard({ initialData, onRegister }: { initialData: any, onRegister?: () => void }) {
-        const [data, setData] = useState(initialData);
+        const [data, setData] = useState({
+            dealType: "expense",
+            settlementStatus: "unsettled",
+            ...initialData
+        });
         const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
         const [errorMsg, setErrorMsg] = useState("");
 
@@ -165,6 +169,22 @@ export default function ChatInterface({ selectedDocs, selectedDocNames = [], fol
                     freee 取引登録（AI抽出結果）
                 </h4>
                 <div className="space-y-3">
+                    <div className="flex gap-3">
+                        <div className="flex-1">
+                            <label className="block text-xs font-semibold text-gray-600 mb-1">収支状況 (Type)</label>
+                            <select className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-blue-200 focus:outline-none" name="dealType" value={data.dealType || "expense"} onChange={handleChange}>
+                                <option value="expense">支出 (Expense)</option>
+                                <option value="income">収入 (Income)</option>
+                            </select>
+                        </div>
+                        <div className="flex-1">
+                            <label className="block text-xs font-semibold text-gray-600 mb-1">決済ステータス (Status)</label>
+                            <select className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-blue-200 focus:outline-none" name="settlementStatus" value={data.settlementStatus || "unsettled"} onChange={handleChange}>
+                                <option value="unsettled">未決済 (Unsettled)</option>
+                                <option value="settled">決済済み (Settled)</option>
+                            </select>
+                        </div>
+                    </div>
                     <div>
                         <label className="block text-xs font-semibold text-gray-600 mb-1">取引先名 (Partner)</label>
                         <input className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-200 focus:outline-none" name="partnerName" value={data.partnerName || ""} onChange={handleChange} />
