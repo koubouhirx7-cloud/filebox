@@ -87,9 +87,10 @@ export async function POST(request: NextRequest) {
         // 4. Determine tax code and format data safely
         const parsedAmount = parseInt(String(amount).replace(/[^0-9]/g, ""), 10) || 0;
         const parsedDate = String(issueDate).replace(/\//g, "-");
+        const parsedAccountId = parseInt(String(accountItemId), 10);
 
         let targetTaxCode = null;
-        const selectedAccountItem = allItems.find((i: any) => i.id === accountItemId);
+        const selectedAccountItem = allItems.find((i: any) => i.id === parsedAccountId);
         if (selectedAccountItem && selectedAccountItem.default_tax_code) {
             targetTaxCode = selectedAccountItem.default_tax_code;
         } else {
@@ -115,8 +116,8 @@ export async function POST(request: NextRequest) {
             company_id: companyId,
             details: [
                 {
-                    tax_code: targetTaxCode,
-                    account_item_id: accountItemId,
+                    tax_code: targetTaxCode || 1, // Add ultimate fallback for tax code to avoid null errors 
+                    account_item_id: parsedAccountId,
                     amount: parsedAmount,
                     description: `${partnerName ? partnerName + " - " : ""}${description || "自動登録"}`
                 }
