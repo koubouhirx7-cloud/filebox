@@ -1,11 +1,20 @@
 import { getServerSession } from "next-auth/next";
 import { authOptions } from "./lib/auth";
+import { prisma } from "./lib/prisma";
 import LoginButton from "./components/LoginButton";
 import LogoutButton from "./components/LogoutButton";
 import Dashboard from "./components/Dashboard";
 
 export default async function Home() {
     const session = await getServerSession(authOptions);
+
+    let hasFreeeLinked = false;
+    if (session?.user?.id) {
+        const freeeAccount = await prisma.freeeAccount.findUnique({
+            where: { userId: session.user.id }
+        });
+        hasFreeeLinked = !!freeeAccount;
+    }
 
     return (
         <main className="min-h-screen bg-gray-50 flex flex-col items-center py-12 px-4 sm:px-6 lg:px-8">
@@ -19,6 +28,16 @@ export default async function Home() {
                             <span className="text-sm text-gray-600 hidden md:inline">
                                 ログイン中: <span className="font-semibold">{session.user?.name}</span>
                             </span>
+                            {hasFreeeLinked ? (
+                                <div className="text-xs font-bold text-white bg-blue-500 px-3 py-1.5 rounded-full shadow-sm flex items-center">
+                                    <svg className="w-3.5 h-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                                    freee連携済み
+                                </div>
+                            ) : (
+                                <a href="/api/freee/auth" className="text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-3 py-1.5 rounded-full shadow-sm transition-colors flex items-center">
+                                    freee連携する
+                                </a>
+                            )}
                             <LogoutButton />
                         </div>
                     ) : (
