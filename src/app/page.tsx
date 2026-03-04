@@ -19,7 +19,7 @@ export default async function Home() {
 
     return (
         <main className="min-h-screen bg-gray-50 flex flex-col items-center py-12 px-4 sm:px-6 lg:px-8">
-            <div className="w-full max-w-4xl flex justify-between items-center bg-white p-4 rounded-xl shadow-sm mb-8 flex-wrap gap-4">
+            <div className="w-full max-w-[95rem] flex justify-between items-center bg-white p-4 rounded-xl shadow-sm mb-8 flex-wrap gap-4">
                 <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600">
                     <a href="/" className="hover:opacity-80 transition-opacity cursor-pointer">File Box (ファイルボックス)</a>
                 </h1>
@@ -50,7 +50,7 @@ export default async function Home() {
                 </div>
             </div>
 
-            <div className="w-full max-w-4xl text-center flex flex-col items-center">
+            <div className="w-full max-w-[95rem] text-center flex flex-col items-center">
                 {!session ? (
                     <div className="bg-white p-10 rounded-2xl shadow-xl w-full max-w-md mt-10 space-y-6">
                         <div className="w-16 h-16 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">

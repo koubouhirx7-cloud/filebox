@@ -255,7 +255,7 @@ export default function Dashboard() {
     // HOME VIEW (Notebook Grid)
     if (!activeFolder) {
         return (
-            <div className="w-full text-left space-y-8 max-w-6xl mx-auto">
+            <div className="w-full text-left space-y-8 max-w-[95rem] mx-auto">
 
                 {/* Global Upcoming Deadlines Section */}
                 <div className="mb-10 bg-white/60 p-5 rounded-3xl border border-red-100 shadow-sm">
