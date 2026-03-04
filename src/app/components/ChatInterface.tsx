@@ -174,7 +174,7 @@ export default function ChatInterface({ selectedDocs, selectedDocNames = [], fol
                         if (initialData.partnerName && fetchedPartners.length > 0) {
                             const exactMatch = fetchedPartners.find((p: any) => p.name === initialData.partnerName || p.name.includes(initialData.partnerName) || initialData.partnerName.includes(p.name));
                             if (exactMatch) {
-                                setData((prev: any) => ({ ...prev, partnerId: exactMatch.id, partnerName: "" }));
+                                setData((prev: any) => ({ ...prev, partnerId: exactMatch.id }));
                             }
                         }
                     }
@@ -189,16 +189,7 @@ export default function ChatInterface({ selectedDocs, selectedDocNames = [], fol
 
         const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
             const { name, value } = e.target;
-            setData((prev: any) => {
-                const updated = { ...prev, [name]: value };
-                // Mutually exclusive partner selection
-                if (name === "partnerId" && value) {
-                    updated.partnerName = ""; // Clear manual input if dropdown is used
-                } else if (name === "partnerName" && value) {
-                    updated.partnerId = ""; // Clear dropdown if manual input is used
-                }
-                return updated;
-            });
+            setData((prev: any) => ({ ...prev, [name]: value }));
         };
 
         const handleSubmit = async () => {
@@ -275,13 +266,16 @@ export default function ChatInterface({ selectedDocs, selectedDocNames = [], fol
                             <div className="text-xs text-gray-500 py-2 animate-pulse">取引先を読み込み中...</div>
                         ) : (
                             <div className="space-y-2">
-                                <select className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-blue-200 focus:outline-none" name="partnerId" value={data.partnerId || ""} onChange={handleChange}>
-                                    <option value="">-- freeeから選択 (未選択) --</option>
-                                    {partners.map((p: any) => (
-                                        <option key={p.id} value={p.id}>{p.name}</option>
-                                    ))}
-                                </select>
-                                <input placeholder="新規作成・直接入力の場合はこちら" className="w-full border border-gray-300 bg-gray-50 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-200 focus:outline-none text-sm" name="partnerName" value={data.partnerName || ""} onChange={handleChange} />
+                                <div>
+                                    <select className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-blue-200 focus:outline-none" name="partnerId" value={data.partnerId || ""} onChange={handleChange}>
+                                        <option value="">-- freeeから選択 (未選択) --</option>
+                                        {partners.map((p: any) => (
+                                            <option key={p.id} value={p.id}>{p.name}</option>
+                                        ))}
+                                    </select>
+                                    <p className="text-[10px] text-gray-500 mt-1">※プルダウンで選択された取引先が優先してfreeeに登録されます。</p>
+                                </div>
+                                <input placeholder="新規作成・直接入力の場合はこちら" className={`w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-200 focus:outline-none text-sm ${data.partnerId ? "bg-gray-100 text-gray-400 border-gray-200" : "bg-gray-50 border-gray-300"}`} name="partnerName" value={data.partnerName || ""} onChange={handleChange} title={data.partnerId ? "プルダウンが選択されているため、こちらのテキスト入力欄は無視されます" : ""} />
                             </div>
                         )}
                     </div>
