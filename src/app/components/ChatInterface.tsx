@@ -135,6 +135,7 @@ export default function ChatInterface({ selectedDocs, selectedDocNames = [], fol
         const [accountItems, setAccountItems] = useState<any[]>([]);
         const [partners, setPartners] = useState<any[]>([]);
         const [isLoadingItems, setIsLoadingItems] = useState(true);
+        const [partnersError, setPartnersError] = useState("");
 
         useEffect(() => {
             const fetchItemsAndPartners = async () => {
@@ -177,6 +178,8 @@ export default function ChatInterface({ selectedDocs, selectedDocNames = [], fol
                                 setData((prev: any) => ({ ...prev, partnerId: exactMatch.id }));
                             }
                         }
+                    } else {
+                        setPartnersError("⚠️ 取引先の取得に失敗しました。freeeアプリ設定内で「取引先の参照」権限が許可されているかご確認ください。");
                     }
                 } catch (e) { }
                 setIsLoadingItems(false);
@@ -266,6 +269,9 @@ export default function ChatInterface({ selectedDocs, selectedDocNames = [], fol
                             <div className="text-xs text-gray-500 py-2 animate-pulse">取引先を読み込み中...</div>
                         ) : (
                             <div className="space-y-2">
+                                {partnersError && (
+                                    <div className="text-xs text-red-600 bg-red-50 p-2 rounded border border-red-200">{partnersError}</div>
+                                )}
                                 <div>
                                     <select className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-blue-200 focus:outline-none" name="partnerId" value={data.partnerId || ""} onChange={handleChange}>
                                         <option value="">-- freeeから選択 (未選択) --</option>
