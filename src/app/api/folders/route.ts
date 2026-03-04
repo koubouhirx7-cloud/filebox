@@ -44,7 +44,8 @@ export async function POST(request: NextRequest) {
         }
 
         const account = await prisma.account.findFirst({
-            where: { userId: session.user.id, provider: "google" }
+            where: { userId: session.user.id, provider: "google" },
+            include: { user: true }
         });
 
         if (!account || !account.access_token) {
@@ -69,28 +70,38 @@ export async function POST(request: NextRequest) {
         });
         const drive = google.drive({ version: "v3", auth: oauth2Client });
 
-        // Find root "File Box" folder first
-        const rootFolderName = "ファイルボックス";
-        let rootFolderId = "";
+        let rootFolderId = account.user.rootDriveFolderId;
 
-        const folderQuery = await drive.files.list({
-            q: `mimeType='application/vnd.google-apps.folder' and name='${rootFolderName}' and trashed=false`,
-            fields: "files(id, name)",
-            spaces: "drive",
-        });
-
-        if (folderQuery.data.files && folderQuery.data.files.length > 0) {
-            rootFolderId = folderQuery.data.files[0].id!;
-        } else {
-            // Create root folder if it doesn't exist yet
-            const folderResponse = await drive.files.create({
-                requestBody: {
-                    name: rootFolderName,
-                    mimeType: "application/vnd.google-apps.folder",
-                },
-                fields: "id",
+        // If not cached gracefully fallback and search
+        if (!rootFolderId) {
+            const rootFolderName = "ファイルボックス";
+            const folderQuery = await drive.files.list({
+                q: `mimeType='application/vnd.google-apps.folder' and name='${rootFolderName}' and trashed=false`,
+                fields: "files(id, name)",
+                spaces: "drive",
             });
-            rootFolderId = folderResponse.data.id!;
+
+            if (folderQuery.data.files && folderQuery.data.files.length > 0) {
+                rootFolderId = folderQuery.data.files[0].id!;
+            } else {
+                // Create root folder if it doesn't exist yet
+                const folderResponse = await drive.files.create({
+                    requestBody: {
+                        name: rootFolderName,
+                        mimeType: "application/vnd.google-apps.folder",
+                    },
+                    fields: "id",
+                });
+                rootFolderId = folderResponse.data.id!;
+            }
+
+            // Cache the root folder ID for future use
+            if (rootFolderId) {
+                await prisma.user.update({
+                    where: { id: session.user.id },
+                    data: { rootDriveFolderId: rootFolderId }
+                });
+            }
         }
 
         // Create the new sub-folder in Drive
@@ -98,7 +109,7 @@ export async function POST(request: NextRequest) {
             requestBody: {
                 name: folderName.trim(),
                 mimeType: "application/vnd.google-apps.folder",
-                parents: [rootFolderId], // Put inside File Box
+                parents: rootFolderId ? [rootFolderId] : [], // Put inside File Box
             },
             fields: "id",
         });

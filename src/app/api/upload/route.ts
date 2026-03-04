@@ -20,7 +20,8 @@ export async function POST(request: NextRequest) {
         }
 
         const account = await prisma.account.findFirst({
-            where: { userId: session.user.id, provider: "google" }
+            where: { userId: session.user.id, provider: "google" },
+            include: { user: true }
         });
 
         if (!account || !account.access_token) {
@@ -65,36 +66,7 @@ export async function POST(request: NextRequest) {
         });
         const drive = google.drive({ version: "v3", auth: oauth2Client });
 
-        // Find or create "File Box" root folder
-        const folderName = "ファイルボックス";
-        let rootFolderId = "";
-
-        try {
-            const folderQuery = await drive.files.list({
-                q: `mimeType='application/vnd.google-apps.folder' and name='${folderName}' and trashed=false`,
-                fields: "files(id, name)",
-                spaces: "drive",
-            });
-
-            if (folderQuery.data.files && folderQuery.data.files.length > 0) {
-                rootFolderId = folderQuery.data.files[0].id!;
-            } else {
-                console.log(`Creating folder: ${folderName}`);
-                const folderResponse = await drive.files.create({
-                    requestBody: {
-                        name: folderName,
-                        mimeType: "application/vnd.google-apps.folder",
-                    },
-                    fields: "id",
-                });
-                rootFolderId = folderResponse.data.id!;
-            }
-        } catch (folderError) {
-            console.error("Error finding or creating folder:", folderError);
-            throw new Error("Failed to configure Google Drive folder.");
-        }
-
-        let targetDriveFolderId = rootFolderId;
+        let targetDriveFolderId = "";
 
         if (folderIdString) {
             // Find the precise drive Folder ID given the SQLite folder ID
@@ -103,6 +75,48 @@ export async function POST(request: NextRequest) {
             });
             if (dbFolder) {
                 targetDriveFolderId = dbFolder.driveFolderId;
+            }
+        }
+
+        // If no targetDriveFolderId is set, it means we are uploading to the root.
+        if (!targetDriveFolderId) {
+            targetDriveFolderId = account.user.rootDriveFolderId || "";
+
+            // If not cached, find or create "File Box" root folder
+            if (!targetDriveFolderId) {
+                const folderName = "ファイルボックス";
+                try {
+                    const folderQuery = await drive.files.list({
+                        q: `mimeType='application/vnd.google-apps.folder' and name='${folderName}' and trashed=false`,
+                        fields: "files(id, name)",
+                        spaces: "drive",
+                    });
+
+                    if (folderQuery.data.files && folderQuery.data.files.length > 0) {
+                        targetDriveFolderId = folderQuery.data.files[0].id!;
+                    } else {
+                        console.log(`Creating folder: ${folderName}`);
+                        const folderResponse = await drive.files.create({
+                            requestBody: {
+                                name: folderName,
+                                mimeType: "application/vnd.google-apps.folder",
+                            },
+                            fields: "id",
+                        });
+                        targetDriveFolderId = folderResponse.data.id!;
+                    }
+
+                    // Cache it for next time
+                    if (targetDriveFolderId) {
+                        await prisma.user.update({
+                            where: { id: session.user.id },
+                            data: { rootDriveFolderId: targetDriveFolderId }
+                        });
+                    }
+                } catch (folderError) {
+                    console.error("Error finding or creating folder:", folderError);
+                    throw new Error("Failed to configure Google Drive folder.");
+                }
             }
         }
 
