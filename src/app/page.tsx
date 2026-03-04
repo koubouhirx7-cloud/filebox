@@ -3,6 +3,7 @@ import { authOptions } from "./lib/auth";
 import { prisma } from "./lib/prisma";
 import LoginButton from "./components/LoginButton";
 import LogoutButton from "./components/LogoutButton";
+import DisconnectFreeeButton from "./components/DisconnectFreeeButton";
 import Dashboard from "./components/Dashboard";
 
 export default async function Home() {
@@ -18,20 +19,23 @@ export default async function Home() {
 
     return (
         <main className="min-h-screen bg-gray-50 flex flex-col items-center py-12 px-4 sm:px-6 lg:px-8">
-            <div className="w-full max-w-4xl flex justify-between items-center bg-white p-4 rounded-xl shadow-sm mb-8">
+            <div className="w-full max-w-4xl flex justify-between items-center bg-white p-4 rounded-xl shadow-sm mb-8 flex-wrap gap-4">
                 <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-indigo-600">
                     <a href="/" className="hover:opacity-80 transition-opacity cursor-pointer">File Box (ファイルボックス)</a>
                 </h1>
                 <div>
                     {session ? (
-                        <div className="flex items-center space-x-4">
-                            <span className="text-sm text-gray-600 hidden md:inline">
+                        <div className="flex items-center flex-wrap gap-3">
+                            <span className="text-sm text-gray-600 hidden md:inline mr-2">
                                 ログイン中: <span className="font-semibold">{session.user?.name}</span>
                             </span>
                             {hasFreeeLinked ? (
-                                <div className="text-xs font-bold text-white bg-blue-500 px-3 py-1.5 rounded-full shadow-sm flex items-center">
-                                    <svg className="w-3.5 h-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-                                    freee連携済み
+                                <div className="flex items-center">
+                                    <div className="text-xs font-bold text-white bg-blue-500 px-3 py-1.5 rounded-full shadow-sm flex items-center">
+                                        <svg className="w-3.5 h-3.5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                                        freee連携済み
+                                    </div>
+                                    <DisconnectFreeeButton />
                                 </div>
                             ) : (
                                 <a href="/api/freee/auth" className="text-xs font-bold text-blue-600 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-3 py-1.5 rounded-full shadow-sm transition-colors flex items-center">
