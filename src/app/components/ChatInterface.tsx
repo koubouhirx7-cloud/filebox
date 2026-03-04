@@ -1,5 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 interface ChatInterfaceProps {
     selectedDocs: string[];
@@ -357,16 +359,22 @@ export default function ChatInterface({ selectedDocs, selectedDocNames = [], fol
         accountingDataList = extracted.data;
         textContent = extracted.cleanText;
 
-        const lines = textContent.split('\n');
         return (
-            <div className="space-y-1 w-full">
-                {lines.map((line, i) => {
+            <div className="space-y-4 w-full">
+                <div className="prose prose-sm prose-indigo max-w-none prose-table:border-collapse prose-th:border prose-th:border-gray-200 prose-td:border prose-td:border-gray-200 prose-th:p-2 prose-td:p-2 prose-th:bg-gray-50">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                        {textContent}
+                    </ReactMarkdown>
+                </div>
+
+                {/* Render suggestion buttons separately if they were extracted from text, or we can let markdown handle lists. For this app, let's keep the custom buttons by extracting them from textContent */}
+                {textContent.split('\n').map((line, i) => {
                     const match = line.match(/^[-*]\s*おすすめ:\s*(.+)/);
                     if (match) {
-                        const suggestion = match[1].replace(/^「|」$/g, ''); // strip quotes if any
+                        const suggestion = match[1].replace(/^「|」$/g, '');
                         return (
                             <button
-                                key={i}
+                                key={`sug-${i}`}
                                 onClick={() => handleSuggestionClick(suggestion)}
                                 className="block w-full text-left bg-white border border-indigo-200 text-indigo-700 hover:bg-indigo-50 hover:border-indigo-300 px-4 py-2 rounded-xl text-sm transition-colors mt-2 mb-1 shadow-sm"
                             >
@@ -375,10 +383,11 @@ export default function ChatInterface({ selectedDocs, selectedDocNames = [], fol
                             </button>
                         );
                     }
-                    return <p key={i} className="min-h-[1rem] leading-relaxed">{line}</p>;
+                    return null;
                 })}
+
                 {accountingDataList.length > 0 && (
-                    <div className="space-y-4">
+                    <div className="space-y-4 pt-2">
                         {accountingDataList.map((data, idx) => (
                             <FreeeRegistrationCard key={idx} initialData={data} />
                         ))}
