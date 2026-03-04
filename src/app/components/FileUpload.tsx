@@ -26,11 +26,18 @@ export default function FileUpload({ onUploadSuccess, folders = [] }: FileUpload
         setLoading(true);
         setError(null);
 
+        const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
         try {
-            for (const f of files) {
+            let successCount = 0;
+            for (let i = 0; i < files.length; i++) {
+                const f = files[i];
                 const formData = new FormData();
                 formData.append("file", f);
                 formData.append("folderId", selectedFolderId);
+
+                // Update error state temporarily to act as a progress indicator
+                setError(`アップロード中... (${i + 1}/${files.length})`);
 
                 const res = await fetch("/api/upload", {
                     method: "POST",
@@ -39,12 +46,21 @@ export default function FileUpload({ onUploadSuccess, folders = [] }: FileUpload
 
                 if (!res.ok) {
                     const data = await res.json();
-                    throw new Error(data.error || "Upload failed");
+                    throw new Error(`ファイル「${f.name}」でエラー: ${data.error || "Upload failed"}`);
+                }
+
+                successCount++;
+
+                // Throttling: To prevent Gemini API Rate Limits (15 RPM free tier)
+                // Wait 4 seconds between files if we have multiple
+                if (i < files.length - 1) {
+                    await sleep(4000);
                 }
             }
 
             setFiles([]);
-            if (onUploadSuccess) {
+            setError(null);
+            if (onUploadSuccess && successCount > 0) {
                 onUploadSuccess();
             }
         } catch (err: any) {
