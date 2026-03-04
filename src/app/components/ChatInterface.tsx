@@ -174,7 +174,7 @@ export default function ChatInterface({ selectedDocs, selectedDocNames = [], fol
                         if (initialData.partnerName && fetchedPartners.length > 0) {
                             const exactMatch = fetchedPartners.find((p: any) => p.name === initialData.partnerName || p.name.includes(initialData.partnerName) || initialData.partnerName.includes(p.name));
                             if (exactMatch) {
-                                setData((prev: any) => ({ ...prev, partnerId: exactMatch.id }));
+                                setData((prev: any) => ({ ...prev, partnerId: exactMatch.id, partnerName: "" }));
                             }
                         }
                     }
@@ -189,7 +189,16 @@ export default function ChatInterface({ selectedDocs, selectedDocNames = [], fol
 
         const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
             const { name, value } = e.target;
-            setData((prev: any) => ({ ...prev, [name]: value }));
+            setData((prev: any) => {
+                const updated = { ...prev, [name]: value };
+                // Mutually exclusive partner selection
+                if (name === "partnerId" && value) {
+                    updated.partnerName = ""; // Clear manual input if dropdown is used
+                } else if (name === "partnerName" && value) {
+                    updated.partnerId = ""; // Clear dropdown if manual input is used
+                }
+                return updated;
+            });
         };
 
         const handleSubmit = async () => {
