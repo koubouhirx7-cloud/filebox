@@ -124,10 +124,107 @@ export default function ChatInterface({ selectedDocs, selectedDocNames = [], fol
         }, 50);
     };
 
-    const renderMessageContent = (content: string) => {
-        const lines = content.split('\n');
+    function FreeeRegistrationCard({ initialData, onRegister }: { initialData: any, onRegister?: () => void }) {
+        const [data, setData] = useState(initialData);
+        const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
+        const [errorMsg, setErrorMsg] = useState("");
+
+        const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+            const { name, value } = e.target;
+            setData(prev => ({ ...prev, [name]: value }));
+        };
+
+        const handleSubmit = async () => {
+            setStatus("loading");
+            try {
+                const res = await fetch("/api/freee/deals", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(data)
+                });
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.error || "登録に失敗しました");
+                }
+                setStatus("success");
+                if (onRegister) onRegister();
+            } catch (e: any) {
+                setStatus("error");
+                setErrorMsg(e.message);
+            }
+        };
+
+        if (status === "success") {
+            return <div className="bg-green-50 text-green-700 p-4 rounded-xl border border-green-200 mt-3 shadow-sm text-sm flex items-center"><svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>freeeへの取引登録が完了しました！</div>
+        }
+
         return (
-            <div className="space-y-1">
+            <div className="bg-white border border-blue-200 rounded-xl p-4 md:p-5 mt-4 shadow-sm text-sm text-gray-800">
+                <h4 className="font-bold text-blue-700 mb-4 flex items-center border-b pb-2">
+                    <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-9 14l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" /></svg>
+                    freee 取引登録（AI抽出結果）
+                </h4>
+                <div className="space-y-3">
+                    <div>
+                        <label className="block text-xs font-semibold text-gray-600 mb-1">取引先名 (Partner)</label>
+                        <input className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-200 focus:outline-none" name="partnerName" value={data.partnerName || ""} onChange={handleChange} />
+                    </div>
+                    <div className="flex gap-3">
+                        <div className="flex-1">
+                            <label className="block text-xs font-semibold text-gray-600 mb-1">発生日 (Date)</label>
+                            <input type="date" className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-200 focus:outline-none" name="issueDate" value={data.issueDate || ""} onChange={handleChange} />
+                        </div>
+                        <div className="flex-1">
+                            <label className="block text-xs font-semibold text-gray-600 mb-1">税込金額 (Amount)</label>
+                            <input type="number" className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-200 focus:outline-none" name="amount" value={data.amount || ""} onChange={handleChange} />
+                        </div>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-semibold text-gray-600 mb-1">品目・摘要 (Description)</label>
+                        <input className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-200 focus:outline-none" name="description" value={data.description || ""} onChange={handleChange} />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-semibold text-gray-600 mb-1">消費税 (Tax)</label>
+                        <select className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-blue-200 focus:outline-none" name="taxRate" value={data.taxRate || "10"} onChange={handleChange}>
+                            <option value="10">10%</option>
+                            <option value="8">8% (軽減税率)</option>
+                            <option value="0">対象外・不課税</option>
+                        </select>
+                    </div>
+                    <button onClick={handleSubmit} disabled={status === "loading"} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-lg mt-4 transition-colors flex justify-center items-center">
+                        {status === "loading" ? (
+                            <>
+                                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                登録処理中...
+                            </>
+                        ) : "内容を確認して freeeへ登録"}
+                    </button>
+                    {status === "error" && <p className="text-red-500 text-xs mt-2 p-2 bg-red-50 rounded">❌ エラー: {errorMsg}</p>}
+                </div>
+            </div>
+        )
+    }
+
+    const renderMessageContent = (content: string) => {
+        const jsonMatch = content.match(/```(?:json)?\n([\s\S]*?)\n```/);
+        let accountingData = null;
+        let textContent = content;
+
+        if (jsonMatch) {
+            try {
+                const parsed = JSON.parse(jsonMatch[1]);
+                if (parsed.isAccountingData) {
+                    accountingData = parsed;
+                    textContent = content.replace(jsonMatch[0], '').trim();
+                }
+            } catch (e) {
+                // Ignore parse errors
+            }
+        }
+
+        const lines = textContent.split('\n');
+        return (
+            <div className="space-y-1 w-full">
                 {lines.map((line, i) => {
                     const match = line.match(/^[-*]\s*おすすめ:\s*(.+)/);
                     if (match) {
@@ -143,8 +240,11 @@ export default function ChatInterface({ selectedDocs, selectedDocNames = [], fol
                             </button>
                         );
                     }
-                    return <p key={i} className="min-h-[1rem]">{line}</p>;
+                    return <p key={i} className="min-h-[1rem] leading-relaxed">{line}</p>;
                 })}
+                {accountingData && (
+                    <FreeeRegistrationCard initialData={accountingData} />
+                )}
             </div>
         );
     };

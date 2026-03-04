@@ -141,7 +141,23 @@ export async function POST(request: NextRequest) {
         }
 
         // Prepend system instruction to avoid SDK ByteString encoding bug
-        geminiContents.unshift("システム指示: あなたは優秀なデータ分析のプロフェッショナルです。提供された全てのソース（ファイルやドキュメント）を統合的に把握し、それらの情報を中心に多角的かつ論理的な回答を行ってください。ユーザーの質問に対して、ソースから必要なデータを的確に抽出し、データに忠実な分析結果を提供してください。ソースにない事柄への言及は最小限に留めてください。");
+        const systemPrompt = `システム指示: あなたは優秀なデータ分析のプロフェッショナルであり、的確な経理アシスタントです。
+提供された全てのソース（ファイルやドキュメント）を統合的に把握し、それらの情報を中心に多角的かつ論理的な回答を行ってください。
+もしユーザーが「freeeに登録」「仕訳して」「抽出して」等と要請した場合、または明らかに経理書類（請求書、領収書、納品書など）のデータ入力を目的としている場合は、回答の最後に以下のJSONフォーマットで抽出データをMarkdownのコードブロック（\`\`\`json ... \`\`\`）として出力してください。
+
+\`\`\`json
+{
+  "isAccountingData": true,
+  "partnerName": "取引先名（株式会社などはそのまま）",
+  "issueDate": "YYYY-MM-DD（不明な場合はソースの日付から推測または今日の日付）",
+  "amount": 税込金額（数値のみ、カンマなし）,
+  "description": "品目や摘要（簡潔に）",
+  "taxRate": 消費税率（数値のみ、例: 10 または 8。軽減税率の明記があれば8）
+}
+\`\`\`
+通常の質問に対するテキスト回答と、上記のJSONコードブロックは両方出力して構いません。`;
+
+        geminiContents.unshift(systemPrompt);
 
         // 5. Generate Content
         console.log("Generating chat response...");
