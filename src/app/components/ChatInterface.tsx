@@ -133,36 +133,55 @@ export default function ChatInterface({ selectedDocs, selectedDocNames = [], fol
             ...initialData
         });
         const [accountItems, setAccountItems] = useState<any[]>([]);
+        const [partners, setPartners] = useState<any[]>([]);
         const [isLoadingItems, setIsLoadingItems] = useState(true);
 
         useEffect(() => {
-            const fetchItems = async () => {
+            const fetchItemsAndPartners = async () => {
                 try {
-                    const res = await fetch("/api/freee/account_items");
-                    if (res.ok) {
-                        const data = await res.json();
-                        setAccountItems(data.items || []);
+                    const [itemsRes, partnersRes] = await Promise.all([
+                        fetch("/api/freee/account_items"),
+                        fetch("/api/freee/partners")
+                    ]);
+
+                    if (itemsRes.ok) {
+                        const itemsData = await itemsRes.json();
+                        setAccountItems(itemsData.items || []);
 
                         // Auto-select a sensible default if none provided
-                        if (!initialData.accountItemId && data.items && data.items.length > 0) {
+                        if (!initialData.accountItemId && itemsData.items && itemsData.items.length > 0) {
                             const isIncome = data.dealType === "income";
                             let bestMatch = null;
                             if (isIncome) {
-                                bestMatch = data.items.find((i: any) => i.name.includes("売上高") || i.name.includes("売上"));
+                                bestMatch = itemsData.items.find((i: any) => i.name.includes("売上高") || i.name.includes("売上"));
                             } else {
-                                bestMatch = data.items.find((i: any) => i.name.includes("仕入高") || i.name.includes("仕入") || i.name.includes("消耗品費") || i.name.includes("雑費"));
+                                bestMatch = itemsData.items.find((i: any) => i.name.includes("仕入高") || i.name.includes("仕入") || i.name.includes("消耗品費") || i.name.includes("雑費"));
                             }
                             if (bestMatch) {
                                 setData((prev: any) => ({ ...prev, accountItemId: bestMatch.id }));
                             } else {
-                                setData((prev: any) => ({ ...prev, accountItemId: data.items[0].id }));
+                                setData((prev: any) => ({ ...prev, accountItemId: itemsData.items[0].id }));
+                            }
+                        }
+                    }
+
+                    if (partnersRes.ok) {
+                        const partnersData = await partnersRes.json();
+                        const fetchedPartners = partnersData.partners || [];
+                        setPartners(fetchedPartners);
+
+                        // Auto-match partnerName from AI to a fetched partner
+                        if (initialData.partnerName && fetchedPartners.length > 0) {
+                            const exactMatch = fetchedPartners.find((p: any) => p.name === initialData.partnerName || p.name.includes(initialData.partnerName) || initialData.partnerName.includes(p.name));
+                            if (exactMatch) {
+                                setData((prev: any) => ({ ...prev, partnerId: exactMatch.id }));
                             }
                         }
                     }
                 } catch (e) { }
                 setIsLoadingItems(false);
             };
-            fetchItems();
+            fetchItemsAndPartners();
         }, []);
 
         const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
@@ -242,7 +261,20 @@ export default function ChatInterface({ selectedDocs, selectedDocNames = [], fol
                     </div>
                     <div>
                         <label className="block text-xs font-semibold text-gray-600 mb-1">取引先名 (Partner)</label>
-                        <input className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-200 focus:outline-none" name="partnerName" value={data.partnerName || ""} onChange={handleChange} />
+                        {/* @ts-ignore - implicitly typed any for isLoadingPartners */}
+                        {isLoadingItems ? (
+                            <div className="text-xs text-gray-500 py-2 animate-pulse">取引先を読み込み中...</div>
+                        ) : (
+                            <div className="space-y-2">
+                                <select className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-blue-200 focus:outline-none" name="partnerId" value={data.partnerId || ""} onChange={handleChange}>
+                                    <option value="">-- freeeから選択 (未選択) --</option>
+                                    {partners.map((p: any) => (
+                                        <option key={p.id} value={p.id}>{p.name}</option>
+                                    ))}
+                                </select>
+                                <input placeholder="新規作成・直接入力の場合はこちら" className="w-full border border-gray-300 bg-gray-50 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-200 focus:outline-none text-sm" name="partnerName" value={data.partnerName || ""} onChange={handleChange} />
+                            </div>
+                        )}
                     </div>
                     <div className="flex gap-3">
                         <div className="flex-1">

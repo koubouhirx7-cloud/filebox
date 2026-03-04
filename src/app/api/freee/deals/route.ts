@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
         }
 
         const data = await request.json();
-        const { partnerName, issueDate, amount, description, taxRate, dealType = "expense", settlementStatus = "unsettled", accountItemId: providedAccountItemId } = data;
+        const { partnerId, partnerName, issueDate, amount, description, taxRate, dealType = "expense", settlementStatus = "unsettled", accountItemId: providedAccountItemId } = data;
 
         if (!issueDate || !amount) {
             return NextResponse.json({ error: "Missing required fields (date, amount)" }, { status: 400 });
@@ -114,12 +114,13 @@ export async function POST(request: NextRequest) {
             issue_date: parsedDate,
             type: dealType,
             company_id: companyId,
+            partner_id: partnerId ? parseInt(String(partnerId), 10) : undefined,
             details: [
                 {
                     tax_code: targetTaxCode || 1, // Add ultimate fallback for tax code to avoid null errors 
                     account_item_id: parsedAccountId,
                     amount: parsedAmount,
-                    description: `${partnerName ? partnerName + " - " : ""}${description || "自動登録"}`
+                    description: `${partnerName && !partnerId ? partnerName + " - " : ""}${description || "自動登録"}`
                 }
             ]
         };
