@@ -32,6 +32,8 @@ export async function POST(request: NextRequest) {
         const formData = await request.formData();
         const file = formData.get("file") as File | null;
         let folderIdString = formData.get("folderId") as string | null;
+        let analyzeOnUploadString = formData.get("analyzeOnUpload") as string | null;
+        const analyzeOnUpload = analyzeOnUploadString === "true";
 
         // Ensure empty string is treated as null
         if (folderIdString === "null" || folderIdString === "") {
@@ -148,6 +150,13 @@ export async function POST(request: NextRequest) {
                 folderId: folderIdString, // Optional subfolder ID
             },
         });
+
+        if (!analyzeOnUpload) {
+            console.log("Skipping AI analysis as requested by user.");
+            await fs.unlink(tempFilePath);
+            tempFilePath = "";
+            return NextResponse.json({ summary: "AI要約はスキップされました。個別ファイルを選択してチャットで質問できます。", documentId: document.id });
+        }
 
         // 6. Initialize Gemini SDK
         const ai = new GoogleGenAI({ apiKey });

@@ -11,6 +11,7 @@ export default function FileUpload({ onUploadSuccess, folders = [] }: FileUpload
     const [selectedFolderId, setSelectedFolderId] = useState<string>(folders.length === 1 ? folders[0].id : "null");
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [analyzeOnUpload, setAnalyzeOnUpload] = useState(false);
 
     // Sync folder ID when switching views
     useEffect(() => {
@@ -35,6 +36,7 @@ export default function FileUpload({ onUploadSuccess, folders = [] }: FileUpload
                 const formData = new FormData();
                 formData.append("file", f);
                 formData.append("folderId", selectedFolderId);
+                formData.append("analyzeOnUpload", analyzeOnUpload ? "true" : "false");
 
                 // Update error state temporarily to act as a progress indicator
                 setError(`アップロード中... (${i + 1}/${files.length})`);
@@ -53,7 +55,7 @@ export default function FileUpload({ onUploadSuccess, folders = [] }: FileUpload
 
                 // Throttling: To prevent Gemini API Rate Limits (15 RPM free tier)
                 // Wait 4 seconds between files if we have multiple
-                if (i < files.length - 1) {
+                if (analyzeOnUpload && i < files.length - 1) {
                     await sleep(4000);
                 }
             }
@@ -106,6 +108,22 @@ export default function FileUpload({ onUploadSuccess, folders = [] }: FileUpload
                                 <li key={i} className="truncate" title={f.name}>{f.name}</li>
                             ))}
                         </ul>
+
+                        <div className="flex items-center justify-between mb-4 mt-2 px-1">
+                            <label className="text-gray-700 text-xs font-medium flex items-start cursor-pointer group">
+                                <input
+                                    type="checkbox"
+                                    checked={analyzeOnUpload}
+                                    onChange={(e) => setAnalyzeOnUpload(e.target.checked)}
+                                    className="mt-0.5 mr-2 h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded cursor-pointer"
+                                    disabled={loading}
+                                />
+                                <span className="flex flex-col">
+                                    <span className="group-hover:text-indigo-600 transition-colors">同時にAIでファイル内容を要約・解析する</span>
+                                    <span className="text-[10px] text-gray-400 font-normal leading-tight mt-1">※オフにするとアップロードが瞬時に完了します。チャット内で後から解析可能です。</span>
+                                </span>
+                            </label>
+                        </div>
 
                         <button
                             type="submit"
