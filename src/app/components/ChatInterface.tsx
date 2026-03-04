@@ -279,29 +279,83 @@ export default function ChatInterface({ selectedDocs, selectedDocNames = [], fol
     }
 
     const renderMessageContent = (content: string) => {
-        const jsonMatches = Array.from(content.matchAll(/```(?:json)?\n([\s\S]*?)\n```/g));
         let accountingDataList: any[] = [];
         let textContent = content;
 
-        if (jsonMatches.length > 0) {
-            for (const match of jsonMatches) {
-                try {
+        // More robust JSON extraction: find any complete JSON array or object
+        // that looks like it could be our accounting data.
+        const extractJSON = (text: string) => {
+            const results: any[] = [];
+            let cleanText = text;
+            try {
+                // First try matching standard markdown code blocks
+                const blockRegex = /```(?:json)?\n([\s\S]*?)\n```/g;
+                let match;
+                while ((match = blockRegex.exec(text)) !== null) {
                     const parsed = JSON.parse(match[1]);
-                    if (Array.isArray(parsed)) {
-                        const validItems = parsed.filter(p => p.isAccountingData);
-                        if (validItems.length > 0) {
-                            accountingDataList.push(...validItems);
-                            textContent = textContent.replace(match[0], '').trim();
-                        }
-                    } else if (parsed.isAccountingData) {
-                        accountingDataList.push(parsed);
-                        textContent = textContent.replace(match[0], '').trim();
+                    if (Array.isArray(parsed) && parsed.some(p => p.isAccountingData)) {
+                        results.push(...parsed.filter(p => p.isAccountingData));
+                        cleanText = cleanText.replace(match[0], '');
+                    } else if (parsed && typeof parsed === 'object' && parsed.isAccountingData) {
+                        results.push(parsed);
+                        cleanText = cleanText.replace(match[0], '');
                     }
-                } catch (e) {
-                    // Ignore parse errors
                 }
+
+                // If strict JSON.parse failed, try a very aggressive regex-based extraction
+                // since AI often generates malformed JSON (e.g., trailing commas, unquoted keys, raw text)
+                if (results.length === 0) {
+                    const findValue = (str: string, key: string) => {
+                        const regex = new RegExp(`"${key}"\\s*:\\s*(?:"([^"]+)"|([^,}]+))`);
+                        const match = str.match(regex);
+                        if (match) {
+                            return match[1] !== undefined ? match[1].trim() : match[2].trim();
+                        }
+                        return null;
+                    };
+
+                    // Look for blocks that look like our objects
+                    const objectBlocks = text.match(/\{[^{}]*"isAccountingData"[^{}]*\}/g);
+                    if (objectBlocks) {
+                        for (const block of objectBlocks) {
+                            try {
+                                // Try normal parse first
+                                const parsed = JSON.parse(block);
+                                if (parsed && parsed.isAccountingData) {
+                                    results.push(parsed);
+                                    cleanText = cleanText.replace(block, '');
+                                    continue;
+                                }
+                            } catch (e) {
+                                // Fallback to manual regex extraction for malformed JSON
+                                const isAccountingData = block.includes('"isAccountingData": true');
+                                if (isAccountingData) {
+                                    const amountStr = findValue(block, "amount");
+                                    const amount = amountStr ? parseInt(amountStr.replace(/[^0-9-]/g, ''), 10) : 0;
+
+                                    results.push({
+                                        isAccountingData: true,
+                                        partnerName: findValue(block, "partnerName") || "",
+                                        issueDate: findValue(block, "issueDate") || "",
+                                        amount: amount,
+                                        description: findValue(block, "description") || "",
+                                        taxRate: findValue(block, "taxRate") || "10",
+                                    });
+                                    cleanText = cleanText.replace(block, '');
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (e) {
+                console.error("Failed to parse JSON from AI response:", e);
             }
-        }
+            return { data: results, cleanText: cleanText.trim() };
+        };
+
+        const extracted = extractJSON(content);
+        accountingDataList = extracted.data;
+        textContent = extracted.cleanText;
 
         const lines = textContent.split('\n');
         return (
