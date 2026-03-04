@@ -76,8 +76,12 @@ export async function POST(request: NextRequest) {
         }
 
         // 4. Fetch Tax Codes to find the matching tax code
-        const taxesRes = await fetch(`https://api.freee.co.jp/api/1/taxes?company_id=${companyId}`, { headers });
-        if (!taxesRes.ok) throw new Error("Failed to fetch taxes");
+        const taxesRes = await fetch(`https://api.freee.co.jp/api/1/taxes/companies/${companyId}`, { headers });
+        if (!taxesRes.ok) {
+            const errText = await taxesRes.text();
+            console.error("Failed to fetch taxes:", errText);
+            throw new Error(`Failed to fetch taxes: ${errText}`);
+        }
         const taxesData = await taxesRes.json();
 
         let targetTaxCode = null;
