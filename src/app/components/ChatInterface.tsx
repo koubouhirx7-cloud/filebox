@@ -130,6 +130,39 @@ export default function ChatInterface({ selectedDocs, selectedDocNames = [], fol
             settlementStatus: "unsettled",
             ...initialData
         });
+        const [accountItems, setAccountItems] = useState<any[]>([]);
+        const [isLoadingItems, setIsLoadingItems] = useState(true);
+
+        useEffect(() => {
+            const fetchItems = async () => {
+                try {
+                    const res = await fetch("/api/freee/account_items");
+                    if (res.ok) {
+                        const data = await res.json();
+                        setAccountItems(data.items || []);
+
+                        // Auto-select a sensible default if none provided
+                        if (!initialData.accountItemId && data.items && data.items.length > 0) {
+                            const isIncome = data.dealType === "income";
+                            let bestMatch = null;
+                            if (isIncome) {
+                                bestMatch = data.items.find((i: any) => i.name.includes("売上高") || i.name.includes("売上"));
+                            } else {
+                                bestMatch = data.items.find((i: any) => i.name.includes("仕入高") || i.name.includes("仕入") || i.name.includes("消耗品費") || i.name.includes("雑費"));
+                            }
+                            if (bestMatch) {
+                                setData((prev: any) => ({ ...prev, accountItemId: bestMatch.id }));
+                            } else {
+                                setData((prev: any) => ({ ...prev, accountItemId: data.items[0].id }));
+                            }
+                        }
+                    }
+                } catch (e) { }
+                setIsLoadingItems(false);
+            };
+            fetchItems();
+        }, []);
+
         const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
         const [errorMsg, setErrorMsg] = useState("");
 
@@ -192,6 +225,18 @@ export default function ChatInterface({ selectedDocs, selectedDocNames = [], fol
                                 <option value="settled">決済済み (Settled)</option>
                             </select>
                         </div>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-semibold text-gray-600 mb-1">勘定科目 (Account Item)</label>
+                        {isLoadingItems ? (
+                            <div className="text-xs text-gray-500 py-2 animate-pulse">勘定科目を読み込み中...</div>
+                        ) : (
+                            <select className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-blue-200 focus:outline-none" name="accountItemId" value={data.accountItemId || ""} onChange={handleChange}>
+                                {accountItems.map((item: any) => (
+                                    <option key={item.id} value={item.id}>{item.name}</option>
+                                ))}
+                            </select>
+                        )}
                     </div>
                     <div>
                         <label className="block text-xs font-semibold text-gray-600 mb-1">取引先名 (Partner)</label>

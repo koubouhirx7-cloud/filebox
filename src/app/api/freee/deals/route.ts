@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
         }
 
         const data = await request.json();
-        const { partnerName, issueDate, amount, description, taxRate, dealType = "expense", settlementStatus = "unsettled" } = data;
+        const { partnerName, issueDate, amount, description, taxRate, dealType = "expense", settlementStatus = "unsettled", accountItemId: providedAccountItemId } = data;
 
         if (!issueDate || !amount) {
             return NextResponse.json({ error: "Missing required fields (date, amount)" }, { status: 400 });
@@ -50,30 +50,33 @@ export async function POST(request: NextRequest) {
         if (!accountItemsRes.ok) throw new Error("Failed to fetch account items");
         const accountItemsData = await accountItemsRes.json();
 
-        let accountItemId = null;
+        let accountItemId = providedAccountItemId || null;
         const allItems = accountItemsData.account_items || [];
-        console.log(`[Freee] Found ${allItems.length} account items for company ${companyId}`);
 
-        // IMPORTANT: Deal endpoints cannot accept account items that are walletables (like bank accounts or cash).
-        // They must be expense/income/assets etc. Filter out walletables explicitly.
-        const nonWalletableItems = allItems.filter((item: any) => !item.walletable_id);
+        if (!accountItemId) {
+            console.log(`[Freee] Found ${allItems.length} account items for company ${companyId}`);
 
-        if (dealType === "income") {
-            const incomeItems = nonWalletableItems.filter((item: any) => item.account_category && item.account_category.includes("income"));
-            const salesItem = incomeItems.find((i: any) => i.name.includes("売上高") || i.name.includes("売上"));
-            accountItemId = salesItem ? salesItem.id : (incomeItems.length > 0 ? incomeItems[0].id : null);
-        } else {
-            const expenseItems = nonWalletableItems.filter((item: any) => item.account_category && (item.account_category.includes("expense") || item.account_category.includes("cost")));
-            const consItem = expenseItems.find((i: any) => i.name.includes("消耗品費") || i.name.includes("外注工賃") || i.name.includes("仕入") || i.name.includes("雑費"));
-            accountItemId = consItem ? consItem.id : (expenseItems.length > 0 ? expenseItems[0].id : null);
-        }
+            // IMPORTANT: Deal endpoints cannot accept account items that are walletables (like bank accounts or cash).
+            // They must be expense/income/assets etc. Filter out walletables explicitly.
+            const nonWalletableItems = allItems.filter((item: any) => !item.walletable_id);
 
-        // Ultimate Fallback: Just take ANY valid non-walletable account item ID from the list so the request doesn't fail
-        if (!accountItemId && nonWalletableItems.length > 0) {
-            console.warn("[Freee] Could not find specific category match, falling back to first available non-walletable account item.");
-            // Try to find any expense-sounding thing manually first
-            const manualFallback = nonWalletableItems.find((i: any) => i.name.includes("費") || i.name.includes("料") || i.name.includes("代"));
-            accountItemId = manualFallback ? manualFallback.id : nonWalletableItems[0].id;
+            if (dealType === "income") {
+                const incomeItems = nonWalletableItems.filter((item: any) => item.account_category && item.account_category.includes("income"));
+                const salesItem = incomeItems.find((i: any) => i.name.includes("売上高") || i.name.includes("売上"));
+                accountItemId = salesItem ? salesItem.id : (incomeItems.length > 0 ? incomeItems[0].id : null);
+            } else {
+                const expenseItems = nonWalletableItems.filter((item: any) => item.account_category && (item.account_category.includes("expense") || item.account_category.includes("cost")));
+                const consItem = expenseItems.find((i: any) => i.name.includes("消耗品費") || i.name.includes("外注工賃") || i.name.includes("仕入") || i.name.includes("雑費"));
+                accountItemId = consItem ? consItem.id : (expenseItems.length > 0 ? expenseItems[0].id : null);
+            }
+
+            // Ultimate Fallback: Just take ANY valid non-walletable account item ID from the list so the request doesn't fail
+            if (!accountItemId && nonWalletableItems.length > 0) {
+                console.warn("[Freee] Could not find specific category match, falling back to first available non-walletable account item.");
+                // Try to find any expense-sounding thing manually first
+                const manualFallback = nonWalletableItems.find((i: any) => i.name.includes("費") || i.name.includes("料") || i.name.includes("代"));
+                accountItemId = manualFallback ? manualFallback.id : nonWalletableItems[0].id;
+            }
         }
 
         if (!accountItemId) {
