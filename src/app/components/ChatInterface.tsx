@@ -131,7 +131,7 @@ export default function ChatInterface({ selectedDocs, selectedDocNames = [], fol
 
         const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
             const { name, value } = e.target;
-            setData(prev => ({ ...prev, [name]: value }));
+            setData((prev: any) => ({ ...prev, [name]: value }));
         };
 
         const handleSubmit = async () => {
