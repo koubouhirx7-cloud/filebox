@@ -5,8 +5,8 @@ import { authOptions } from "@/app/lib/auth";
 export async function GET(request: NextRequest) {
     try {
         const FREEE_CLIENT_ID = process.env.FREEE_CLIENT_ID;
-        // Determine the redirect URI dynamically based on the current host
-        const redirectUri = `${request.nextUrl.protocol}//${request.nextUrl.host}/api/freee/callback`;
+        const redirectUrlObj = new URL(request.url);
+        const redirectUri = `${redirectUrlObj.origin}/api/freee/callback`;
         const session = await getServerSession(authOptions);
         if (!session || !session.user?.id) {
             return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
