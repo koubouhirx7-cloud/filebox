@@ -75,44 +75,46 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "No default account item found in freee: " + JSON.stringify(accountItemsData) }, { status: 400 });
         }
 
-        // 4. Fetch Tax Codes to find the matching tax code
-        const taxesRes = await fetch(`https://api.freee.co.jp/api/1/taxes/companies/${companyId}`, { headers });
-        if (!taxesRes.ok) {
-            const errText = await taxesRes.text();
-            console.error("Failed to fetch taxes:", errText);
-            throw new Error(`Failed to fetch taxes: ${errText}`);
-        }
-        const taxesData = await taxesRes.json();
+        // 4. Determine tax code and format data safely
+        const parsedAmount = parseInt(String(amount).replace(/[^0-9]/g, ""), 10) || 0;
+        const parsedDate = String(issueDate).replace(/\//g, "-");
 
         let targetTaxCode = null;
-        const targetRate = parseInt(String(taxRate).replace(/[^0-9]/g, "")) || 10;
-
-        // Very basic matching based on name and rate (simplified for prototype)
-        // Freee taxes list is complex (課税仕入, etc). We will look for 課税仕入 string and matching rate.
-        const expenseTaxes = taxesData.taxes.filter((t: any) => dealType === "income" ? (t.name.includes("課税売上") || t.name.includes("対象外")) : (t.name.includes("課税仕入") || t.name.includes("対象外")));
-        for (const t of expenseTaxes) {
-            if (targetRate === 10 && t.name.includes("10%")) targetTaxCode = t.code;
-            if (targetRate === 8 && t.name.includes("8%")) targetTaxCode = t.code;
-            if (targetRate === 0 && t.name.includes("対象外")) targetTaxCode = t.code;
+        const selectedAccountItem = allItems.find((i: any) => i.id === accountItemId);
+        if (selectedAccountItem && selectedAccountItem.default_tax_code) {
+            targetTaxCode = selectedAccountItem.default_tax_code;
+        } else {
+            // Fallback to fetching taxes if somehow default_tax_code is missing
+            const taxesRes = await fetch(`https://api.freee.co.jp/api/1/taxes/companies/${companyId}`, { headers });
+            if (taxesRes.ok) {
+                const taxesData = await taxesRes.json();
+                const targetRate = parseInt(String(taxRate).replace(/[^0-9]/g, "")) || 10;
+                const expenseTaxes = taxesData.taxes.filter((t: any) => dealType === "income" ? (t.name.includes("課税売上") || t.name.includes("対象外")) : (t.name.includes("課税仕入") || t.name.includes("対象外")));
+                for (const t of expenseTaxes) {
+                    if (targetRate === 10 && t.name.includes("10%")) targetTaxCode = t.code;
+                    if (targetRate === 8 && t.name.includes("8%")) targetTaxCode = t.code;
+                    if (targetRate === 0 && t.name.includes("対象外")) targetTaxCode = t.code;
+                }
+                if (!targetTaxCode && expenseTaxes.length > 0) targetTaxCode = expenseTaxes[0].code;
+            }
         }
-        // Fallback to first code if not found
-        if (!targetTaxCode && expenseTaxes.length > 0) targetTaxCode = expenseTaxes[0].code;
 
         // 5. Create Deal (未決済 or 決済済)
         const dealPayload: any = {
-            issue_date: issueDate,
+            issue_date: parsedDate,
             type: dealType,
             company_id: companyId,
-            due_amount: parseInt(amount, 10),
             details: [
                 {
                     tax_code: targetTaxCode,
                     account_item_id: accountItemId,
-                    amount: parseInt(amount, 10),
+                    amount: parsedAmount,
                     description: `${partnerName ? partnerName + " - " : ""}${description || "自動登録"}`
                 }
             ]
         };
+
+        let isPaymentAdded = false;
 
         if (settlementStatus === "settled") {
             const walletsRes = await fetch(`https://api.freee.co.jp/api/1/walletables?company_id=${companyId}`, { headers });
@@ -140,15 +142,22 @@ export async function POST(request: NextRequest) {
             if (paymentWalletableId) {
                 dealPayload.payments = [
                     {
-                        amount: parseInt(amount, 10),
-                        date: issueDate,
+                        amount: parsedAmount,
+                        date: parsedDate,
                         from_walletable_type: paymentWalletableType,
                         from_walletable_id: paymentWalletableId
                     }
                 ];
+                isPaymentAdded = true;
             } else {
                 console.warn("No walletable found for settled payment, registering as unsettled");
             }
+        }
+
+        // Only add due_amount if NO payments are attached (i.e. unsettled)
+        // Freee API will throw 400 error if both due_amount and payments are present
+        if (!isPaymentAdded) {
+            dealPayload.due_amount = parsedAmount;
         }
 
         const dealsRes = await fetch("https://api.freee.co.jp/api/1/deals", {

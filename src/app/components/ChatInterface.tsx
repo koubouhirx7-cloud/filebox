@@ -148,7 +148,15 @@ export default function ChatInterface({ selectedDocs, selectedDocNames = [], fol
                 });
                 if (!res.ok) {
                     const err = await res.json();
-                    throw new Error(err.error || "登録に失敗しました");
+                    let errMsg = err.error || "登録に失敗しました";
+                    // If Freee returned specific validation errors, append them
+                    if (err.details && err.details.errors) {
+                        const specificErrors = err.details.errors.map((e: any) => e.messages ? e.messages.join(", ") : "").filter(Boolean).join(" | ");
+                        if (specificErrors) {
+                            errMsg += ` 詳細: ${specificErrors}`;
+                        }
+                    }
+                    throw new Error(errMsg);
                 }
                 setStatus("success");
                 if (onRegister) onRegister();
