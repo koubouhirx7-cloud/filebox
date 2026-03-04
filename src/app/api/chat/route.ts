@@ -114,13 +114,31 @@ export async function POST(request: NextRequest) {
             // Strictly sanitize mimeType to prevent ByteString errors from Japanese chars in parameters
             const cleanMimeType = doc.mimeType ? doc.mimeType.split(';')[0].trim() : "text/plain";
 
-            const uploadResult = await ai.files.upload({
-                file: tempPath,
-                config: {
-                    mimeType: cleanMimeType,
-                    displayName: `file-${crypto.randomUUID()}`
-                },
-            });
+            let uploadResult;
+            let uploadRetries = 3;
+            while (uploadRetries > 0) {
+                try {
+                    uploadResult = await ai.files.upload({
+                        file: tempPath,
+                        config: {
+                            mimeType: cleanMimeType,
+                            displayName: `file-${crypto.randomUUID()}`
+                        },
+                    });
+                    break;
+                } catch (uploadError: any) {
+                    if (uploadError.status === 429 || (uploadError.message && uploadError.message.includes('429'))) {
+                        console.warn(`Rate limit hit during upload. Retries left: ${uploadRetries - 1}. Sleeping for 15s...`);
+                        uploadRetries--;
+                        if (uploadRetries === 0) throw uploadError;
+                        await sleep(15000);
+                    } else {
+                        throw uploadError;
+                    }
+                }
+            }
+
+            if (!uploadResult) throw new Error("Upload failed completely.");
 
             uploadResults.push({
                 fileData: {
@@ -172,11 +190,28 @@ export async function POST(request: NextRequest) {
 
         // 5. Generate Content
         console.log("Generating chat response...");
-        const result = await ai.models.generateContent({
-            model: "gemini-3-flash-preview",
-            contents: geminiContents
-        });
+        let result;
+        let generateRetries = 3;
+        while (generateRetries > 0) {
+            try {
+                result = await ai.models.generateContent({
+                    model: "gemini-3-flash-preview",
+                    contents: geminiContents
+                });
+                break;
+            } catch (generateError: any) {
+                if (generateError.status === 429 || (generateError.message && generateError.message.includes('429'))) {
+                    console.warn(`Rate limit hit during generation. Retries left: ${generateRetries - 1}. Sleeping for 15s...`);
+                    generateRetries--;
+                    if (generateRetries === 0) throw generateError;
+                    await sleep(15000);
+                } else {
+                    throw generateError;
+                }
+            }
+        }
 
+        if (!result) throw new Error("Generation failed completely.");
         const replyText = result.text || "";
 
         // Save Messages (Only if initial request)

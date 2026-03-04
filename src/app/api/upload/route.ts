@@ -163,31 +163,69 @@ export async function POST(request: NextRequest) {
 
         console.log("Uploading file to Gemini File API:", tempFilePath);
 
+        const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
         // 7. Upload to Gemini File API
         const cleanMimeType = file.type ? file.type.split(';')[0].trim() : "text/plain";
-        const uploadResult = await ai.files.upload({
-            file: tempFilePath,
-            config: {
-                mimeType: cleanMimeType,
-                displayName: `file-${crypto.randomUUID()}`
+        let uploadResult;
+        let uploadRetries = 3;
+        while (uploadRetries > 0) {
+            try {
+                uploadResult = await ai.files.upload({
+                    file: tempFilePath,
+                    config: {
+                        mimeType: cleanMimeType,
+                        displayName: `file-${crypto.randomUUID()}`
+                    }
+                });
+                break;
+            } catch (uploadError: any) {
+                if (uploadError.status === 429 || (uploadError.message && uploadError.message.includes('429'))) {
+                    console.warn(`Rate limit hit during upload. Retries left: ${uploadRetries - 1}. Sleeping for 15s...`);
+                    uploadRetries--;
+                    if (uploadRetries === 0) throw uploadError;
+                    await sleep(15000);
+                } else {
+                    throw uploadError;
+                }
             }
-        });
+        }
+
+        if (!uploadResult) throw new Error("Upload failed completely.");
 
         console.log("File uploaded successfully. Generating content...");
 
         // 6. Generate content using the uploaded file
-        const result = await ai.models.generateContent({
-            model: "gemini-3-flash-preview",
-            contents: [
-                {
-                    fileData: {
-                        mimeType: uploadResult.mimeType || cleanMimeType,
-                        fileUri: uploadResult.uri,
-                    }
-                },
-                "このドキュメントの内容を日本語で分かりやすく要約してください。",
-            ],
-        });
+        let result;
+        let generateRetries = 3;
+        while (generateRetries > 0) {
+            try {
+                result = await ai.models.generateContent({
+                    model: "gemini-3-flash-preview",
+                    contents: [
+                        {
+                            fileData: {
+                                mimeType: uploadResult.mimeType || cleanMimeType,
+                                fileUri: uploadResult.uri,
+                            }
+                        },
+                        "このドキュメントの内容を日本語で分かりやすく要約してください。",
+                    ],
+                });
+                break;
+            } catch (generateError: any) {
+                if (generateError.status === 429 || (generateError.message && generateError.message.includes('429'))) {
+                    console.warn(`Rate limit hit during generation. Retries left: ${generateRetries - 1}. Sleeping for 15s...`);
+                    generateRetries--;
+                    if (generateRetries === 0) throw generateError;
+                    await sleep(15000);
+                } else {
+                    throw generateError;
+                }
+            }
+        }
+
+        if (!result) throw new Error("Generation failed completely.");
 
         // 9. Clean up temp file
         await fs.unlink(tempFilePath);
