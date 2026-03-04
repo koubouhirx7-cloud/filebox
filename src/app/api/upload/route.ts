@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
         const drive = google.drive({ version: "v3", auth: oauth2Client });
 
         // Find or create "File Box" root folder
-        const folderName = "File Box";
+        const folderName = "ファイルボックス";
         let rootFolderId = "";
 
         try {
