@@ -279,19 +279,27 @@ export default function ChatInterface({ selectedDocs, selectedDocNames = [], fol
     }
 
     const renderMessageContent = (content: string) => {
-        const jsonMatch = content.match(/```(?:json)?\n([\s\S]*?)\n```/);
-        let accountingData = null;
+        const jsonMatches = Array.from(content.matchAll(/```(?:json)?\n([\s\S]*?)\n```/g));
+        let accountingDataList: any[] = [];
         let textContent = content;
 
-        if (jsonMatch) {
-            try {
-                const parsed = JSON.parse(jsonMatch[1]);
-                if (parsed.isAccountingData) {
-                    accountingData = parsed;
-                    textContent = content.replace(jsonMatch[0], '').trim();
+        if (jsonMatches.length > 0) {
+            for (const match of jsonMatches) {
+                try {
+                    const parsed = JSON.parse(match[1]);
+                    if (Array.isArray(parsed)) {
+                        const validItems = parsed.filter(p => p.isAccountingData);
+                        if (validItems.length > 0) {
+                            accountingDataList.push(...validItems);
+                            textContent = textContent.replace(match[0], '').trim();
+                        }
+                    } else if (parsed.isAccountingData) {
+                        accountingDataList.push(parsed);
+                        textContent = textContent.replace(match[0], '').trim();
+                    }
+                } catch (e) {
+                    // Ignore parse errors
                 }
-            } catch (e) {
-                // Ignore parse errors
             }
         }
 
@@ -315,8 +323,12 @@ export default function ChatInterface({ selectedDocs, selectedDocNames = [], fol
                     }
                     return <p key={i} className="min-h-[1rem] leading-relaxed">{line}</p>;
                 })}
-                {accountingData && (
-                    <FreeeRegistrationCard initialData={accountingData} />
+                {accountingDataList.length > 0 && (
+                    <div className="space-y-4">
+                        {accountingDataList.map((data, idx) => (
+                            <FreeeRegistrationCard key={idx} initialData={data} />
+                        ))}
+                    </div>
                 )}
             </div>
         );
