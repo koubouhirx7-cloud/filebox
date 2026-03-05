@@ -24,7 +24,14 @@ export async function GET(request: NextRequest) {
         };
 
         const companiesRes = await fetch("https://api.freee.co.jp/api/1/companies", { headers });
-        if (!companiesRes.ok) return NextResponse.json({ error: "Failed to fetch company" }, { status: 500 });
+        if (!companiesRes.ok) {
+            const errText = await companiesRes.text();
+            console.error("Freee companies fetch error:", companiesRes.status, errText);
+            if (companiesRes.status === 401) {
+                return NextResponse.json({ error: "freeeの連携有効期限が切れました。画面右上の「freee連携済み」ボタンから一度解除し、再度連携を行ってください。" }, { status: 401 });
+            }
+            return NextResponse.json({ error: "Failed to fetch company", details: errText }, { status: 500 });
+        }
 
         const companiesData = await companiesRes.json();
         const companyId = companiesData.companies?.[0]?.id;

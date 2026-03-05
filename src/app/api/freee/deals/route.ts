@@ -34,9 +34,12 @@ export async function POST(request: NextRequest) {
         // 2. Get Company ID reliably
         const companiesRes = await fetch("https://api.freee.co.jp/api/1/companies", { headers });
         if (!companiesRes.ok) {
-            const err = await companiesRes.text();
-            console.error("Failed to fetch companies:", err);
-            return NextResponse.json({ error: "Failed to fetch freee company info" }, { status: 500 });
+            const errText = await companiesRes.text();
+            console.error("Freee companies fetch error:", companiesRes.status, errText);
+            if (companiesRes.status === 401) {
+                return NextResponse.json({ error: "freeeの連携有効期限が切れました。画面右上の「freee連携済み」ボタンから一度解除し、再度連携を行ってください。" }, { status: 401 });
+            }
+            return NextResponse.json({ error: "Failed to fetch freee company info", details: errText }, { status: 500 });
         }
         const companiesData = await companiesRes.json();
         const companyId = companiesData.companies?.[0]?.id;
