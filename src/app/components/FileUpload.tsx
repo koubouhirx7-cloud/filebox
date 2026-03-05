@@ -91,18 +91,19 @@ export default function FileUpload({ onUploadSuccess, onUploadStart, folderId, f
                 // Background upload done! Tell Dashboard to replace tempId with real data.
                 onUploadSuccess(tempId);
             } else {
-                const data = await response.json();
+                const data = await response.json().catch(() => ({}));
                 // If it failed, we still call onUploadSuccess with tempId to remove the pending visual
                 // and potentially display an error state for that specific item in the parent component.
                 onUploadSuccess(tempId);
-                // Optionally, you might want to pass the error message back to the parent
-                // or handle it differently for individual files.
-                console.error(`ファイル「${file.name}」のアップロード失敗: ${data.error || '不明なエラー'}`);
+                const errorMsg = data.error || '不明なエラー';
+                console.error(`ファイル「${file.name}」のアップロード失敗: ${errorMsg}`);
+                alert(`アップロード失敗: ${errorMsg}`);
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error("Upload Error:", error);
             // If it failed, we still call onUploadSuccess with tempId to remove the pending visual
             onUploadSuccess(tempId);
+            alert(`「${file.name}」の通信エラー: ${error.message || 'サーバーに接続できません'}`);
         }
     };
 
