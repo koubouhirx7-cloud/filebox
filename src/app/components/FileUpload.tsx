@@ -34,13 +34,6 @@ export default function FileUpload({ onUploadSuccess, onUploadStart, folderId, f
         for (let i = 0; i < files.length; i++) {
             const fileToUpload = files[i];
 
-            // 0. Client-side file size check (Vercel Serverless limits payload to 4.5MB)
-            // We set a strict 4MB (4 * 1024 * 1024 bytes) limit to be safe.
-            if (fileToUpload.size > 4 * 1024 * 1024) {
-                alert(`「${fileToUpload.name}」はサイズが大きすぎます（上限4MB）。ブラウザの制限によりアップロードできませんので、容量を減らして再度お試しください。`);
-                continue; // Skip this file and proceed to the next one
-            }
-
             const tempId = `temp-${Date.now()}-${i}`; // Unique temp ID for each file
 
             // 1. Immediately create a "Pending (Fake)" document for Optimistic UI
