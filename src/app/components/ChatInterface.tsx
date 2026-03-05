@@ -325,6 +325,26 @@ export default function ChatInterface({ selectedDocs, selectedDocNames = [], fol
             }
         };
 
+        const handleMarkAsRegistered = async () => {
+            if (!data.documentId) return;
+            setStatus("loading");
+            try {
+                const res = await fetch(`/api/files/${data.documentId}/register`, {
+                    method: "PATCH",
+                });
+                if (!res.ok) {
+                    throw new Error("更新に失敗しました");
+                }
+                setStatus("success");
+                if (onRegister) onRegister();
+                // trigger a reload so the parent component refetches data
+                setTimeout(() => window.location.reload(), 1500);
+            } catch (e: any) {
+                setStatus("error");
+                setErrorMsg(e.message);
+            }
+        };
+
         if (status === "success") {
             return <div className="bg-green-50 text-green-700 p-4 rounded-xl border border-green-200 mt-3 shadow-sm text-sm flex items-center"><svg className="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>freeeへの取引登録が完了しました！</div>
         }
@@ -412,14 +432,22 @@ export default function ChatInterface({ selectedDocs, selectedDocNames = [], fol
                             <option value="0">対象外・不課税</option>
                         </select>
                     </div>
-                    <button onClick={handleSubmit} disabled={status === "loading"} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-lg mt-4 transition-colors flex justify-center items-center">
-                        {status === "loading" ? (
-                            <>
-                                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                                登録処理中...
-                            </>
-                        ) : "内容を確認して freeeへ登録"}
-                    </button>
+                    <div className="flex flex-col gap-2 mt-4">
+                        <button onClick={handleSubmit} disabled={status === "loading"} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2.5 rounded-lg transition-colors flex justify-center items-center">
+                            {status === "loading" ? (
+                                <>
+                                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                    処理中...
+                                </>
+                            ) : "内容を確認して freeeへ登録"}
+                        </button>
+
+                        {data.documentId && (
+                            <button onClick={handleMarkAsRegistered} disabled={status === "loading"} className="w-full bg-white border border-gray-300 hover:bg-gray-50 text-gray-600 font-medium py-2 rounded-lg transition-colors text-xs flex justify-center items-center">
+                                freee連携せず、「登録済み」として非表示にする
+                            </button>
+                        )}
+                    </div>
                     {status === "error" && <p className="text-red-500 text-xs mt-2 p-2 bg-red-50 rounded">❌ エラー: {errorMsg}</p>}
                 </div>
             </div>
