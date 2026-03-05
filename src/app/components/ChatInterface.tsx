@@ -595,26 +595,36 @@ export default function ChatInterface({ selectedDocs, selectedDocNames = [], fol
                                 if (href.startsWith("doc=")) {
                                     const docId = href.replace("doc=", "");
                                     const fileName = String(props.children);
+                                    const targetDoc = documents.find(d => d.id === docId);
+                                    const isRegistered = targetDoc?.isRegisteredToFreee;
                                     return (
-                                        <button
-                                            onClick={async (e) => {
-                                                e.preventDefault();
-                                                try {
-                                                    const res = await fetch(`/api/files/${docId}/link`);
-                                                    if (!res.ok) throw new Error("Failed to get link");
-                                                    const data = await res.json();
-                                                    if (data.url) window.open(data.url, '_blank');
-                                                } catch (err) {
-                                                    console.error("Failed to open file:", err);
-                                                    alert("ファイルを開けませんでした");
-                                                }
-                                            }}
-                                            className="inline-flex items-center gap-1 bg-blue-50 text-blue-600 px-2 py-0.5 rounded text-xs font-medium hover:bg-blue-100 transition-colors border border-blue-200"
-                                            title="クリックしてファイルを確認"
-                                        >
-                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-                                            {fileName}
-                                        </button>
+                                        <span className="inline-flex items-center gap-1 mx-1">
+                                            <button
+                                                onClick={async (e) => {
+                                                    e.preventDefault();
+                                                    try {
+                                                        const res = await fetch(`/api/files/${docId}/link`);
+                                                        if (!res.ok) throw new Error("Failed to get link");
+                                                        const data = await res.json();
+                                                        if (data.url) window.open(data.url, '_blank');
+                                                    } catch (err) {
+                                                        console.error("Failed to open file:", err);
+                                                        alert("ファイルを開けませんでした");
+                                                    }
+                                                }}
+                                                className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium transition-colors border ${isRegistered ? 'bg-gray-100 text-gray-600 border-gray-300 hover:bg-gray-200' : 'bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100'}`}
+                                                title="クリックしてファイルを確認"
+                                            >
+                                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                                                {fileName}
+                                            </button>
+                                            {isRegistered && (
+                                                <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full font-bold ml-1 flex items-center gap-0.5">
+                                                    <svg className="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
+                                                    freee登録済
+                                                </span>
+                                            )}
+                                        </span>
                                     );
                                 }
                                 return <a {...props} className="text-blue-500 hover:underline" target="_blank" rel="noopener noreferrer" />;
