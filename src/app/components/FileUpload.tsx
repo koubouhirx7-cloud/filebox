@@ -33,6 +33,14 @@ export default function FileUpload({ onUploadSuccess, onUploadStart, folderId, f
 
         for (let i = 0; i < files.length; i++) {
             const fileToUpload = files[i];
+
+            // 0. Client-side file size check (Vercel Serverless limits payload to 4.5MB)
+            // We set a strict 4MB (4 * 1024 * 1024 bytes) limit to be safe.
+            if (fileToUpload.size > 4 * 1024 * 1024) {
+                alert(`「${fileToUpload.name}」はサイズが大きすぎます（上限4MB）。ブラウザの制限によりアップロードできませんので、容量を減らして再度お試しください。`);
+                continue; // Skip this file and proceed to the next one
+            }
+
             const tempId = `temp-${Date.now()}-${i}`; // Unique temp ID for each file
 
             // 1. Immediately create a "Pending (Fake)" document for Optimistic UI
@@ -91,13 +99,26 @@ export default function FileUpload({ onUploadSuccess, onUploadStart, folderId, f
                 // Background upload done! Tell Dashboard to replace tempId with real data.
                 onUploadSuccess(tempId);
             } else {
-                const data = await response.json().catch(() => ({}));
+                let errorMsg = "不明なエラー";
+                if (response.status === 413) {
+                    errorMsg = "サーバーの受信サイズ上限（約4.5MB）を超過しました。";
+                } else if (response.status === 504) {
+                    errorMsg = "サーバーがタイムアウトしました。";
+                } else {
+                    try {
+                        const data = await response.json();
+                        if (data && data.error) errorMsg = data.error;
+                    } catch (e) {
+                        // Unable to parse JSON
+                        errorMsg = `システムエラー (Status: ${response.status})`;
+                    }
+                }
+
                 // If it failed, we still call onUploadSuccess with tempId to remove the pending visual
                 // and potentially display an error state for that specific item in the parent component.
                 onUploadSuccess(tempId);
-                const errorMsg = data.error || '不明なエラー';
                 console.error(`ファイル「${file.name}」のアップロード失敗: ${errorMsg}`);
-                alert(`アップロード失敗: ${errorMsg}`);
+                alert(`「${file.name}」のアップロードに失敗しました\nエラー内容: ${errorMsg}`);
             }
         } catch (error: any) {
             console.error("Upload Error:", error);

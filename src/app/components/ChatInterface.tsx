@@ -587,7 +587,40 @@ export default function ChatInterface({ selectedDocs, selectedDocNames = [], fol
         return (
             <div className="space-y-4 w-full">
                 <div className="prose prose-sm prose-indigo max-w-none prose-table:border-collapse prose-th:border prose-th:border-gray-200 prose-td:border prose-td:border-gray-200 prose-th:p-2 prose-td:p-2 prose-th:bg-gray-50">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                            a: ({ node, ...props }) => {
+                                const href = props.href || "";
+                                if (href.startsWith("doc=")) {
+                                    const docId = href.replace("doc=", "");
+                                    const fileName = String(props.children);
+                                    return (
+                                        <button
+                                            onClick={async (e) => {
+                                                e.preventDefault();
+                                                try {
+                                                    const res = await fetch(`/api/files/${docId}/link`);
+                                                    if (!res.ok) throw new Error("Failed to get link");
+                                                    const data = await res.json();
+                                                    if (data.url) window.open(data.url, '_blank');
+                                                } catch (err) {
+                                                    console.error("Failed to open file:", err);
+                                                    alert("ファイルを開けませんでした");
+                                                }
+                                            }}
+                                            className="inline-flex items-center gap-1 bg-blue-50 text-blue-600 px-2 py-0.5 rounded text-xs font-medium hover:bg-blue-100 transition-colors border border-blue-200"
+                                            title="クリックしてファイルを確認"
+                                        >
+                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                                            {fileName}
+                                        </button>
+                                    );
+                                }
+                                return <a {...props} className="text-blue-500 hover:underline" target="_blank" rel="noopener noreferrer" />;
+                            }
+                        }}
+                    >
                         {textContent}
                     </ReactMarkdown>
                 </div>
