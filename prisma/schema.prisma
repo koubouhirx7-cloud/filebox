@@ -63,13 +63,14 @@ model VerificationToken {
 }
 
 model Document {
-  id            String   @id @default(cuid())
-  filename      String
-  driveFileId   String
-  mimeType      String
-  userId        String
-  folderId      String?
-  createdAt     DateTime @default(now())
+  id                  String   @id @default(cuid())
+  filename            String
+  driveFileId         String
+  mimeType            String
+  userId              String
+  folderId            String?
+  isRegisteredToFreee Boolean  @default(false)
+  createdAt           DateTime @default(now())
 
   user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   folder        Folder?  @relation(fields: [folderId], references: [id], onDelete: SetNull)

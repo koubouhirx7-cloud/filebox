@@ -11,7 +11,7 @@ export async function POST(request: NextRequest) {
         }
 
         const data = await request.json();
-        const { partnerId, partnerName, issueDate, amount, description, taxRate, dealType = "expense", settlementStatus = "unsettled", accountItemId: providedAccountItemId } = data;
+        const { partnerId, partnerName, issueDate, amount, description, taxRate, dealType = "expense", settlementStatus = "unsettled", accountItemId: providedAccountItemId, documentId } = data;
 
         if (!issueDate || !amount) {
             return NextResponse.json({ error: "Missing required fields (date, amount)" }, { status: 400 });
@@ -184,6 +184,25 @@ export async function POST(request: NextRequest) {
         }
 
         const createdDeal = await dealsRes.json();
+
+        // Mark the Document as registered to Freee if a documentId was provided
+        if (documentId) {
+            try {
+                // Verify the document belongs to the user
+                const doc = await prisma.document.findUnique({
+                    where: { id: documentId }
+                });
+                if (doc && doc.userId === session.user.id) {
+                    await prisma.document.update({
+                        where: { id: documentId },
+                        data: { isRegisteredToFreee: true }
+                    });
+                }
+            } catch (dbError) {
+                console.error("Deal was created, but failed to update document registration status:", dbError);
+                // We don't want to throw an error back to the client since the deal was successfully created
+            }
+        }
 
         return NextResponse.json({ success: true, deal: createdDeal });
 

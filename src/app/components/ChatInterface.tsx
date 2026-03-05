@@ -378,6 +378,7 @@ export default function ChatInterface({ selectedDocs, selectedDocNames = [], fol
 
                                     results.push({
                                         isAccountingData: true,
+                                        documentId: findValue(block, "documentId") || "",
                                         partnerName: findValue(block, "partnerName") || "",
                                         issueDate: findValue(block, "issueDate") || "",
                                         amount: amount,

@@ -146,7 +146,7 @@ export async function POST(request: NextRequest) {
                     mimeType: cleanMimeType,
                     fileUri: uploadResult.uri,
                 },
-                filenameMessage: `(上記のファイルは「${doc.filename}」という名前のファイルです)`
+                filenameMessage: `(上記のファイルは「${doc.filename}」という名前のファイルです。ID=${doc.id}。freee登録済み=${doc.isRegisteredToFreee ? "true" : "false"})`
             });
 
             // Throttle consecutive uploads to prevent Gemini 20 RPM Free Tier Limit
@@ -173,9 +173,13 @@ export async function POST(request: NextRequest) {
 提供された全てのソース（ファイルやドキュメント）を統合的に把握し、それらの情報を中心に多角的かつ論理的な回答を行ってください。
 もしユーザーが「freeeに登録」「仕訳して」「抽出して」等と要請した場合、または明らかに複数の経理書類（請求書、領収書、納品書など）のデータ入力を目的としている場合は、回答の最後に以下のJSONフォーマットで抽出データをMarkdownのコードブロック（\`\`\`json ... \`\`\`）として出力してください。複数ある場合は配列に複数のオブジェクトを含めてください。1つの場合でも配列にしてください。
 
+【重要】
+「freee登録済み=true」となっているファイルについては、既に登録が完了しているため、絶対にデータ抽出の対象にしないでください（JSONに出力しないでください）。抽出するのは「freee登録済み=false」の未登録ファイルのみです。
+
 \`\`\`json
 [
   {
+    "documentId": "ソースファイルのID（ID=...で渡された文字列）",
     "isAccountingData": true,
     "partnerName": "取引先名（株式会社などはそのまま）",
     "issueDate": "YYYY-MM-DD（不明な場合はソースの日付から推測または今日の日付）",
