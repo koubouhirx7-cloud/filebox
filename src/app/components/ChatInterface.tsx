@@ -1,7 +1,108 @@
 "use client";
-import { useState, useEffect } from "react";
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import React, { useState, useEffect, useRef } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import FileUpload from "./FileUpload";
+
+// Custom Searchable Dropdown Component
+function SearchableSelect({
+    options,
+    value,
+    onChange,
+    placeholder = "選択してください",
+    name
+}: {
+    options: { id: string | number; name: string }[];
+    value: string;
+    onChange: (e: any) => void;
+    placeholder?: string;
+    name: string;
+}) {
+    const [isOpen, setIsOpen] = useState(false);
+    const [search, setSearch] = useState("");
+    const wrapperRef = useRef<HTMLDivElement>(null);
+
+    // Click outside to close
+    useEffect(() => {
+        function handleClickOutside(event: MouseEvent) {
+            if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        }
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    const filteredOptions = options.filter(opt =>
+        opt.name.toLowerCase().includes(search.toLowerCase())
+    );
+
+    const selectedOption = options.find(opt => String(opt.id) === String(value));
+
+    return (
+        <div ref={wrapperRef} className="relative w-full text-sm">
+            {/* Standard hidden input to hold the actual value for form compatibility */}
+            <input type="hidden" name={name} value={value} />
+
+            {/* Trigger Button */}
+            <div
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white flex justify-between items-center cursor-pointer focus-within:ring-2 focus-within:ring-blue-200"
+                onClick={() => setIsOpen(!isOpen)}
+            >
+                <span className={`truncate ${selectedOption ? "text-gray-900" : "text-gray-400"}`}>
+                    {selectedOption ? selectedOption.name : placeholder}
+                </span>
+                <svg className={`w-4 h-4 text-gray-400 transition-transform ${isOpen ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+            </div>
+
+            {/* Dropdown Menu */}
+            {isOpen && (
+                <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-lg shadow-lg max-h-60 flex flex-col">
+                    <div className="p-2 border-b border-gray-100 flex-shrink-0">
+                        <input
+                            type="text"
+                            className="w-full px-2 py-1.5 text-sm bg-gray-50 border border-gray-200 rounded outline-none focus:ring-2 focus:ring-blue-100 placeholder-gray-400"
+                            placeholder="名前で検索..."
+                            value={search}
+                            onChange={(e) => setSearch(e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
+                            autoFocus
+                        />
+                    </div>
+                    <ul className="overflow-y-auto w-full">
+                        <li
+                            className={`px-3 py-2 cursor-pointer hover:bg-gray-50 text-gray-500 ${!value ? "bg-blue-50 text-blue-700 font-medium" : ""}`}
+                            onClick={() => {
+                                onChange({ target: { name, value: "" } });
+                                setIsOpen(false);
+                                setSearch("");
+                            }}
+                        >
+                            未選択
+                        </li>
+                        {filteredOptions.length > 0 ? (
+                            filteredOptions.map((opt) => (
+                                <li
+                                    key={opt.id}
+                                    className={`px-3 py-2 cursor-pointer hover:bg-gray-50 text-gray-800 ${String(value) === String(opt.id) ? "bg-blue-50 text-blue-700 font-medium" : ""}`}
+                                    onClick={() => {
+                                        onChange({ target: { name, value: String(opt.id) } });
+                                        setIsOpen(false);
+                                        setSearch("");
+                                    }}
+                                >
+                                    {opt.name}
+                                </li>
+                            ))
+                        ) : (
+                            <li className="px-3 py-3 text-center text-gray-400">見つかりませんでした</li>
+                        )}
+                    </ul>
+                </div>
+            )}
+        </div>
+    );
+}
 
 interface ChatInterfaceProps {
     selectedDocs: string[];
@@ -255,11 +356,13 @@ export default function ChatInterface({ selectedDocs, selectedDocNames = [], fol
                         {isLoadingItems ? (
                             <div className="text-xs text-gray-500 py-2 animate-pulse">勘定科目を読み込み中...</div>
                         ) : (
-                            <select className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-blue-200 focus:outline-none" name="accountItemId" value={data.accountItemId || ""} onChange={handleChange}>
-                                {accountItems.map((item: any) => (
-                                    <option key={item.id} value={item.id}>{item.name}</option>
-                                ))}
-                            </select>
+                            <SearchableSelect
+                                name="accountItemId"
+                                value={data.accountItemId || ""}
+                                onChange={handleChange}
+                                options={accountItems}
+                                placeholder="-- 勘定科目を選択 --"
+                            />
                         )}
                     </div>
                     <div>
@@ -273,12 +376,13 @@ export default function ChatInterface({ selectedDocs, selectedDocNames = [], fol
                                     <div className="text-xs text-red-600 bg-red-50 p-2 rounded border border-red-200">{partnersError}</div>
                                 )}
                                 <div>
-                                    <select className="w-full border border-gray-300 rounded-lg px-3 py-2 bg-white focus:ring-2 focus:ring-blue-200 focus:outline-none" name="partnerId" value={data.partnerId || ""} onChange={handleChange}>
-                                        <option value="">-- freeeから選択 (未選択) --</option>
-                                        {partners.map((p: any) => (
-                                            <option key={p.id} value={p.id}>{p.name}</option>
-                                        ))}
-                                    </select>
+                                    <SearchableSelect
+                                        name="partnerId"
+                                        value={data.partnerId || ""}
+                                        onChange={handleChange}
+                                        options={partners}
+                                        placeholder="-- 取引先を選択 (未選択) --"
+                                    />
                                     <p className="text-[10px] text-gray-500 mt-1">※プルダウンで選択された取引先が優先してfreeeに登録されます。</p>
                                 </div>
                                 <input placeholder="新規作成・直接入力の場合はこちら" className={`w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-200 focus:outline-none text-sm ${data.partnerId ? "bg-gray-100 text-gray-400 border-gray-200" : "bg-gray-50 border-gray-300"}`} name="partnerName" value={data.partnerName || ""} onChange={handleChange} title={data.partnerId ? "プルダウンが選択されているため、こちらのテキスト入力欄は無視されます" : ""} />
