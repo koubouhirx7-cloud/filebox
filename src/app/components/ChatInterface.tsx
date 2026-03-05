@@ -606,7 +606,7 @@ export default function ChatInterface({ selectedDocs, selectedDocNames = [], fol
                                                         const res = await fetch(`/api/files/${docId}/link`);
                                                         if (!res.ok) throw new Error("Failed to get link");
                                                         const data = await res.json();
-                                                        if (data.url) window.open(data.url, '_blank');
+                                                        if (data.link) window.open(data.link, '_blank');
                                                     } catch (err) {
                                                         console.error("Failed to open file:", err);
                                                         alert("ファイルを開けませんでした");
