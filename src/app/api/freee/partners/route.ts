@@ -31,13 +31,32 @@ export async function GET(request: NextRequest) {
 
         if (!companyId) return NextResponse.json({ error: "No company" }, { status: 400 });
 
-        const partnersRes = await fetch(`https://api.freee.co.jp/api/1/partners?company_id=${companyId}&limit=100`, { headers });
-        if (!partnersRes.ok) return NextResponse.json({ error: "Failed to fetch partners" }, { status: 500 });
+        let allPartners: any[] = [];
+        let offset = 0;
+        const limit = 3000;
+        let hasMore = true;
 
-        const data = await partnersRes.json();
-        const partners = data.partners || [];
+        while (hasMore) {
+            const partnersRes = await fetch(`https://api.freee.co.jp/api/1/partners?company_id=${companyId}&limit=${limit}&offset=${offset}`, { headers });
 
-        return NextResponse.json({ partners });
+            // If rate limited or standard error, we break out with what we have if we have some, otherwise throw
+            if (!partnersRes.ok) {
+                if (allPartners.length > 0) break;
+                return NextResponse.json({ error: "Failed to fetch partners" }, { status: 500 });
+            }
+
+            const data = await partnersRes.json();
+            const partners = data.partners || [];
+            allPartners = [...allPartners, ...partners];
+
+            if (partners.length < limit) {
+                hasMore = false;
+            } else {
+                offset += limit;
+            }
+        }
+
+        return NextResponse.json({ partners: allPartners });
 
     } catch (error: any) {
         return NextResponse.json({ error: error.message }, { status: 500 });

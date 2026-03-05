@@ -31,14 +31,32 @@ export async function GET(request: NextRequest) {
 
         if (!companyId) return NextResponse.json({ error: "No company" }, { status: 400 });
 
-        const accountItemsRes = await fetch(`https://api.freee.co.jp/api/1/account_items?company_id=${companyId}`, { headers });
-        if (!accountItemsRes.ok) return NextResponse.json({ error: "Failed to fetch items" }, { status: 500 });
+        let allItems: any[] = [];
+        let offset = 0;
+        const limit = 3000;
+        let hasMore = true;
 
-        const data = await accountItemsRes.json();
-        const items = data.account_items || [];
+        while (hasMore) {
+            const accountItemsRes = await fetch(`https://api.freee.co.jp/api/1/account_items?company_id=${companyId}&limit=${limit}&offset=${offset}`, { headers });
+
+            if (!accountItemsRes.ok) {
+                if (allItems.length > 0) break;
+                return NextResponse.json({ error: "Failed to fetch items" }, { status: 500 });
+            }
+
+            const data = await accountItemsRes.json();
+            const items = data.account_items || [];
+            allItems = [...allItems, ...items];
+
+            if (items.length < limit) {
+                hasMore = false;
+            } else {
+                offset += limit;
+            }
+        }
 
         // Filter out walletables (banks, cash, etc)
-        const validItems = items.filter((item: any) => !item.walletable_id);
+        const validItems = allItems.filter((item: any) => !item.walletable_id);
 
         return NextResponse.json({ items: validItems });
 
