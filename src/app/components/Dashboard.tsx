@@ -16,6 +16,7 @@ const PASTEL_COLORS = [
 
 export default function Dashboard() {
     const [documents, setDocuments] = useState<any[]>([]);
+    const [pendingDocs, setPendingDocs] = useState<any[]>([]); // Plan B: Optimistic UI
     const [folders, setFolders] = useState<any[]>([]);
     const [selectedDocs, setSelectedDocs] = useState<Set<string>>(new Set());
     const [isReloading, setIsReloading] = useState(false);
@@ -122,7 +123,14 @@ export default function Dashboard() {
         }
     };
 
-    const handleUploadSuccess = async () => {
+    const handleUploadStart = (fakeDoc: any) => {
+        setPendingDocs(prev => [fakeDoc, ...prev]);
+    };
+
+    const handleUploadSuccess = async (fakeIdToRemove?: string) => {
+        if (fakeIdToRemove) {
+            setPendingDocs(prev => prev.filter(p => p.id !== fakeIdToRemove));
+        }
         await fetchDocuments();
     };
 
@@ -545,6 +553,7 @@ export default function Dashboard() {
                 <div className="flex-1 overflow-y-auto pr-2">
                     <FileList
                         documents={documents.filter(d => d.folderId === activeFolder.id)}
+                        pendingDocs={pendingDocs.filter(d => d.folderId === activeFolder.id)}
                         folders={[]}
                         selectedDocs={selectedDocs}
                         onToggleSelection={toggleDocumentSelection}
@@ -555,7 +564,9 @@ export default function Dashboard() {
                 <div className="pt-3 border-t border-gray-200 mt-3 flex-shrink-0">
                     <FileUpload
                         onUploadSuccess={handleUploadSuccess}
-                        folders={[activeFolder]}
+                        onUploadStart={handleUploadStart}
+                        folderId={activeFolder.id}
+                        folderCategory={activeFolder.category}
                     />
                 </div>
             </div>

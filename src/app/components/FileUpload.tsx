@@ -1,24 +1,23 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 
 interface FileUploadProps {
-    onUploadSuccess?: () => void;
-    folders?: any[];
+    onUploadSuccess: (fakeIdToRemove?: string) => void;
+    onUploadStart?: (fakeDoc: any) => void;
+    folderId?: string;
+    folderCategory?: string;
 }
 
-export default function FileUpload({ onUploadSuccess, folders = [] }: FileUploadProps) {
+export default function FileUpload({ onUploadSuccess, onUploadStart, folderId, folderCategory }: FileUploadProps) {
     const [files, setFiles] = useState<File[]>([]);
-    const [selectedFolderId, setSelectedFolderId] = useState<string>(folders.length === 1 ? folders[0].id : "null");
+    // Removed selectedFolderId state as it's now passed via prop folderId
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [analyzeOnUpload, setAnalyzeOnUpload] = useState(false);
 
-    // Sync folder ID when switching views
-    useEffect(() => {
-        if (folders.length === 1) {
-            setSelectedFolderId(folders[0].id);
-        }
-    }, [folders]);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    // Removed useEffect for syncing folder ID as folders prop is removed
 
     const handleUpload = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -29,46 +28,81 @@ export default function FileUpload({ onUploadSuccess, folders = [] }: FileUpload
 
         const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+        let successCount = 0;
+        const tempIds: string[] = [];
+
+        for (let i = 0; i < files.length; i++) {
+            const fileToUpload = files[i];
+            const tempId = `temp-${Date.now()}-${i}`; // Unique temp ID for each file
+
+            // 1. Immediately create a "Pending (Fake)" document for Optimistic UI
+            const fakeDoc = {
+                id: tempId,
+                filename: fileToUpload.name,
+                mimeType: fileToUpload.type,
+                folderId: folderId, // Use prop folderId
+                createdAt: new Date().toISOString(),
+                isPending: true,
+            };
+
+            if (onUploadStart) {
+                onUploadStart(fakeDoc);
+            }
+            tempIds.push(tempId);
+
+            const formData = new FormData();
+            formData.append("file", fileToUpload);
+            formData.append("folderId", folderId || "null"); // Use prop folderId, default to "null" if not provided
+            formData.append("analyzeOnUpload", analyzeOnUpload ? "true" : "false");
+
+            // Update error state temporarily to act as a progress indicator
+            setError(`アップロード中... (${i + 1}/${files.length})`);
+
+            // 3. Fire-and-forget the actual heavy upload in the background
+            // We'll handle success/failure for each file individually
+            uploadInBackground(fileToUpload, formData, tempId);
+
+            // Throttling: To prevent Gemini API Rate Limits (20 RPM free tier)
+            // Wait 7 seconds between files if we have multiple and analyzeOnUpload is true
+            if (analyzeOnUpload && i < files.length - 1) {
+                await sleep(7000);
+            }
+        }
+
+        // 2. Clear UI state immediately so user can upload more things instantly.
+        setFiles([]);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+        setLoading(false); // Set loading to false after initiating all background uploads
+        setError(null); // Clear general error message
+
+        // The onUploadSuccess for the overall component is now handled by individual background uploads
+        // If we need a single success callback for all, we'd need to track all background uploads.
+        // For now, onUploadSuccess is called per file in uploadInBackground.
+    };
+
+    const uploadInBackground = async (file: File, formData: FormData, tempId: string) => {
         try {
-            let successCount = 0;
-            for (let i = 0; i < files.length; i++) {
-                const f = files[i];
-                const formData = new FormData();
-                formData.append("file", f);
-                formData.append("folderId", selectedFolderId);
-                formData.append("analyzeOnUpload", analyzeOnUpload ? "true" : "false");
+            const response = await fetch("/api/upload", {
+                method: "POST",
+                body: formData,
+            });
 
-                // Update error state temporarily to act as a progress indicator
-                setError(`アップロード中... (${i + 1}/${files.length})`);
-
-                const res = await fetch("/api/upload", {
-                    method: "POST",
-                    body: formData,
-                });
-
-                if (!res.ok) {
-                    const data = await res.json();
-                    throw new Error(`ファイル「${f.name}」でエラー: ${data.error || "Upload failed"}`);
-                }
-
-                successCount++;
-
-                // Throttling: To prevent Gemini API Rate Limits (20 RPM free tier)
-                // Wait 7 seconds between files if we have multiple
-                if (analyzeOnUpload && i < files.length - 1) {
-                    await sleep(7000);
-                }
+            if (response.ok) {
+                // Background upload done! Tell Dashboard to replace tempId with real data.
+                onUploadSuccess(tempId);
+            } else {
+                const data = await response.json();
+                // If it failed, we still call onUploadSuccess with tempId to remove the pending visual
+                // and potentially display an error state for that specific item in the parent component.
+                onUploadSuccess(tempId);
+                // Optionally, you might want to pass the error message back to the parent
+                // or handle it differently for individual files.
+                console.error(`ファイル「${file.name}」のアップロード失敗: ${data.error || '不明なエラー'}`);
             }
-
-            setFiles([]);
-            setError(null);
-            if (onUploadSuccess && successCount > 0) {
-                onUploadSuccess();
-            }
-        } catch (err: any) {
-            setError(err.message || "An error occurred");
-        } finally {
-            setLoading(false);
+        } catch (error) {
+            console.error("Upload Error:", error);
+            // If it failed, we still call onUploadSuccess with tempId to remove the pending visual
+            onUploadSuccess(tempId);
         }
     };
 
