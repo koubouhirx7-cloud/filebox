@@ -56,6 +56,20 @@ export async function GET(
 
     } catch (error: any) {
         console.error("Link Fetch API Error:", error);
+
+        // Auto-cleanup Zombie Files: 
+        // If Google Drive returns a 404 (file not found or trashed), the user deleted it directly in Drive.
+        // We should prune our local database to match this reality.
+        if (error.code === 404 || error.status === 404) {
+            try {
+                await prisma.document.delete({ where: { id: (await params).id } });
+                console.log(`Auto-cleaned zombie file from DB: ${(await params).id}`);
+            } catch (dbErr) {
+                console.error("Failed to auto-clean zombie file:", dbErr);
+            }
+            return NextResponse.json({ error: "ファイルはGoogle Drive上で既に削除されています。リストから整理しました。" }, { status: 404 });
+        }
+
         return NextResponse.json({ error: error.message || "Failed to fetch file link from Drive" }, { status: 500 });
     }
 }

@@ -12,6 +12,22 @@ interface FileListProps {
 export default function FileList({ documents, folders = [], selectedDocs, onToggleSelection, onDeleteDocument }: FileListProps) {
     const rootDocs = documents.filter(d => !d.folderId);
 
+    // State for bulk preview modal
+    const [previewDocs, setPreviewDocs] = useState<any[]>([]);
+    const [previewIndex, setPreviewIndex] = useState(0);
+
+    const openBulkPreview = () => {
+        const docsToPreview = documents.filter(d => selectedDocs.has(d.id));
+        if (docsToPreview.length > 0) {
+            setPreviewDocs(docsToPreview);
+            setPreviewIndex(0);
+        }
+    };
+
+    const closeBulkPreview = () => {
+        setPreviewDocs([]);
+    };
+
     // Group docs by folderId
     const docsByFolder: Record<string, any[]> = {};
     folders.forEach(f => {
@@ -21,7 +37,18 @@ export default function FileList({ documents, folders = [], selectedDocs, onTogg
         <div className="w-full flex flex-col h-full">
             <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-bold text-gray-700">ソース ({documents.length})</h3>
-                <span className="text-xs text-gray-400">すべて選択</span>
+                <div className="flex gap-2">
+                    {selectedDocs.size > 0 && (
+                        <button
+                            onClick={openBulkPreview}
+                            className="text-xs flex items-center bg-indigo-50 text-indigo-600 hover:bg-indigo-100 px-2 py-1 rounded transition-colors"
+                        >
+                            <svg className="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                            選択をプレビュー
+                        </button>
+                    )}
+                    <span className="text-xs text-gray-400 self-center">すべて選択</span>
+                </div>
             </div>
 
             {documents.length === 0 ? (
@@ -102,6 +129,69 @@ export default function FileList({ documents, folders = [], selectedDocs, onTogg
                     )}
                 </div>
             )}
+
+            {/* Bulk Preview Modal */}
+            {previewDocs.length > 0 && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 sm:p-8">
+                    <div className="bg-white w-full max-w-6xl h-full flex flex-col rounded-2xl shadow-2xl overflow-hidden relative">
+                        {/* Header */}
+                        <div className="flex justify-between items-center px-4 py-3 border-b bg-gray-50 shrink-0">
+                            <div className="flex items-center">
+                                <span className="bg-indigo-600 text-white text-xs font-bold px-2 py-1 rounded-md mr-3">
+                                    {previewIndex + 1} / {previewDocs.length}
+                                </span>
+                                <h3 className="font-bold text-gray-800 truncate max-w-sm sm:max-w-md">
+                                    {previewDocs[previewIndex].filename}
+                                </h3>
+                            </div>
+                            <button onClick={closeBulkPreview} className="p-1.5 hover:bg-gray-200 rounded-lg text-gray-500 transition-colors">
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                            </button>
+                        </div>
+
+                        {/* Content */}
+                        <div className="flex-1 bg-gray-100 relative">
+                            {/* Previous Button */}
+                            <button
+                                onClick={() => setPreviewIndex(prev => Math.max(0, prev - 1))}
+                                disabled={previewIndex === 0}
+                                className="absolute left-2 top-1/2 -translate-y-1/2 z-10 p-2 bg-white/80 hover:bg-white text-gray-800 rounded-full shadow-lg disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                            >
+                                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                            </button>
+
+                            <iframe
+                                src={`https://drive.google.com/file/d/${previewDocs[previewIndex].driveFileId}/preview`}
+                                className="w-full h-full border-0"
+                                allow="autoplay"
+                            ></iframe>
+
+                            {/* Next Button */}
+                            <button
+                                onClick={() => setPreviewIndex(prev => Math.min(previewDocs.length - 1, prev + 1))}
+                                disabled={previewIndex === previewDocs.length - 1}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 z-10 p-2 bg-white/80 hover:bg-white text-gray-800 rounded-full shadow-lg disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                            >
+                                <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                            </button>
+                        </div>
+
+                        {/* Thumbnail Footer */}
+                        <div className="h-20 bg-gray-800 flex items-center px-4 overflow-x-auto gap-2 shrink-0 no-scrollbar">
+                            {previewDocs.map((doc, idx) => (
+                                <button
+                                    key={doc.id}
+                                    onClick={() => setPreviewIndex(idx)}
+                                    className={`h-14 min-w-[100px] border-2 rounded-lg px-2 flex items-center justify-center text-xs truncate transition-all ${idx === previewIndex ? 'border-indigo-400 bg-gray-700 text-white' : 'border-transparent bg-gray-900 text-gray-400 hover:bg-gray-700'}`}
+                                    title={doc.filename}
+                                >
+                                    <span className="truncate w-full text-center">{doc.filename}</span>
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
@@ -126,7 +216,11 @@ function DocumentItem({ doc, isSelected, onToggle, onDelete }: { doc: any, isSel
                     alert("プレビューリンクが見つかりませんでした。");
                 }
             } else {
-                alert("プレビューリンクの取得に失敗しました。");
+                const errorData = await res.json().catch(() => ({}));
+                alert(errorData.error || "プレビューリンクの取得に失敗しました。");
+                if (res.status === 404) {
+                    window.location.reload(); // Reload to clear the zombie file from the UI
+                }
             }
         } catch (error) {
             console.error("View Error:", error);
