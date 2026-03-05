@@ -607,15 +607,17 @@ export default function ChatInterface({ selectedDocs, selectedDocNames = [], fol
                     チャット
                 </div>
                 {selectedDocs.length > 0 && (
-                    <div className="flex items-center text-xs font-medium text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-100 animate-pulse">
-                        <span className="relative flex h-2 w-2 mr-2">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
-                        </span>
+                    <div className={`flex items-center text-xs font-medium text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full border border-indigo-100 ${isLoading ? 'animate-pulse' : ''}`}>
+                        {isLoading && (
+                            <span className="relative flex h-2 w-2 mr-2">
+                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                                <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
+                            </span>
+                        )}
                         <span className="truncate max-w-[150px] md:max-w-xs block">
                             {selectedDocNames.length > 0 ? selectedDocNames.join(', ') : `${selectedDocs.length}個のソース`}
                         </span>
-                        <span className="ml-1 flex-shrink-0">を分析中</span>
+                        <span className="ml-1 flex-shrink-0">{isLoading ? 'を分析中' : 'を選択中'}</span>
                     </div>
                 )}
             </h2>
