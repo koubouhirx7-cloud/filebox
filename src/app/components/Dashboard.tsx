@@ -605,6 +605,7 @@ export default function Dashboard() {
                     selectedDocNames={Array.from(selectedDocs).map(id => documents.find(d => d.id === id)?.filename || "名称未設定")}
                     folderId={activeFolder.id}
                     reloadTrigger={reloadTrigger}
+                    documents={documents}
                 />
             </div>
         </div>

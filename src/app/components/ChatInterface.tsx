@@ -109,9 +109,10 @@ interface ChatInterfaceProps {
     selectedDocNames?: string[];
     folderId: string;
     reloadTrigger?: number;
+    documents?: any[];
 }
 
-export default function ChatInterface({ selectedDocs, selectedDocNames = [], folderId, reloadTrigger = 0 }: ChatInterfaceProps) {
+export default function ChatInterface({ selectedDocs, selectedDocNames = [], folderId, reloadTrigger = 0, documents = [] }: ChatInterfaceProps) {
     const [input, setInput] = useState("");
     const [messages, setMessages] = useState<{ role: "user" | "ai"; content: string }[]>([]);
     const [isLoading, setIsLoading] = useState(false);
@@ -495,10 +496,33 @@ export default function ChatInterface({ selectedDocs, selectedDocNames = [], fol
                         }
                     }
                 }
+
+                // --- STRICT FILTERING OF ALREADY REGISTERED DOCUMENTS ---
+                const registeredSelectedIds = new Set(
+                    selectedDocs.filter(id => {
+                        const doc = documents.find(d => d.id === id);
+                        return doc?.isRegisteredToFreee;
+                    })
+                );
+
+                // If ALL selected documents are registered, we can safely drop all AI JSON results
+                // This prevents AI hallucinating generic documentIds or omitting them
+                if (registeredSelectedIds.size === selectedDocs.length && selectedDocs.length > 0) {
+                    return { data: [], cleanText: text }; // Return original text without stripping if it was all registered
+                }
+
+                // If a mix, filter out any results that explicitly map to a registered document
+                const filteredResults = results.filter(r => {
+                    if (r.documentId && registeredSelectedIds.has(r.documentId)) return false;
+                    return true;
+                });
+
+                return { data: filteredResults, cleanText: cleanText.trim() };
+
             } catch (e) {
                 console.error("Failed to parse JSON from AI response:", e);
+                return { data: results, cleanText: cleanText.trim() };
             }
-            return { data: results, cleanText: cleanText.trim() };
         };
 
         const extracted = extractJSON(content);

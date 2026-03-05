@@ -257,9 +257,17 @@ function DocumentItem({ doc, isSelected, onToggle, onDelete }: { doc: any, isSel
                     >
                         {isViewing ? 'リンク取得中...' : doc.filename}
                     </button>
-                    <p className="text-[10px] text-gray-400 mt-0.5">
-                        {new Date(doc.createdAt).toLocaleDateString("ja-JP")}
-                    </p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                        <p className="text-[10px] text-gray-400">
+                            {new Date(doc.createdAt).toLocaleDateString("ja-JP")}
+                        </p>
+                        {doc.isRegisteredToFreee && (
+                            <span className="text-[9px] bg-blue-50 border border-blue-200 text-blue-600 px-1.5 py-0.5 rounded font-medium flex items-center">
+                                <svg className="w-2.5 h-2.5 mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                                freee登録済
+                            </span>
+                        )}
+                    </div>
                 </div>
             </label>
             {onDelete && (
