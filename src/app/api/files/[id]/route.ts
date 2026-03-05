@@ -38,7 +38,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
             oauth2Client.setCredentials({
                 access_token: account.access_token,
                 refresh_token: account.refresh_token,
-                expiry_date: account.expires_at ? account.expires_at * 1000 : null,
+                expiry_date: account.expires_at ? account.expires_at * 1000 : undefined,
             });
 
             const drive = google.drive({ version: "v3", auth: oauth2Client });

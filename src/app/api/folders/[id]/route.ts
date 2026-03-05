@@ -49,7 +49,8 @@ export async function PUT(
                     );
                     oauth2Client.setCredentials({
                         access_token: account.access_token,
-                        refresh_token: account.refresh_token
+                        refresh_token: account.refresh_token,
+                        expiry_date: account.expires_at ? account.expires_at * 1000 : undefined,
                     });
                     const drive = google.drive({ version: "v3", auth: oauth2Client });
                     await drive.files.update({
