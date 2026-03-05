@@ -33,32 +33,30 @@ export async function GET(request: NextRequest) {
 
         let allPartners: any[] = [];
         let offset = 0;
-        const limit = 100;
-        let hasMore = true;
+        const limit = 3000;
 
-        while (hasMore) {
+        try {
+            console.log(`Fetching from Freee API: limit=${limit}, offset=${offset}`);
             const partnersRes = await fetch(`https://api.freee.co.jp/api/1/partners?company_id=${companyId}&limit=${limit}&offset=${offset}`, { headers });
 
-            // If rate limited or standard error, we break out with what we have if we have some, otherwise throw
             if (!partnersRes.ok) {
-                if (allPartners.length > 0) break;
-                return NextResponse.json({ error: "Failed to fetch partners" }, { status: 500 });
+                const errText = await partnersRes.text();
+                console.error("Freee API Error:", partnersRes.status, errText);
+                return NextResponse.json({ error: "Failed to fetch partners", details: errText }, { status: 500 });
             }
 
             const data = await partnersRes.json();
-            const partners = data.partners || [];
-            allPartners = [...allPartners, ...partners];
+            allPartners = data.partners || [];
 
-            if (partners.length < limit) {
-                hasMore = false;
-            } else {
-                offset += limit;
-            }
+        } catch (fetchErr: any) {
+            console.error("Fetch Exception:", fetchErr);
+            return NextResponse.json({ error: "Fetch exception", details: fetchErr.message }, { status: 500 });
         }
 
         return NextResponse.json({ partners: allPartners });
 
     } catch (error: any) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
+        console.error("Unhandled error:", error);
+        return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
     }
 }

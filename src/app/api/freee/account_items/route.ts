@@ -31,34 +31,28 @@ export async function GET(request: NextRequest) {
 
         if (!companyId) return NextResponse.json({ error: "No company" }, { status: 400 });
 
-        let allItems: any[] = [];
-        let offset = 0;
         const limit = 100;
-        let hasMore = true;
 
-        while (hasMore) {
-            const accountItemsRes = await fetch(`https://api.freee.co.jp/api/1/account_items?company_id=${companyId}&limit=${limit}&offset=${offset}`, { headers });
+        try {
+            const accountItemsRes = await fetch(`https://api.freee.co.jp/api/1/account_items?company_id=${companyId}&limit=${limit}`, { headers });
 
             if (!accountItemsRes.ok) {
-                if (allItems.length > 0) break;
-                return NextResponse.json({ error: "Failed to fetch items" }, { status: 500 });
+                const errText = await accountItemsRes.text();
+                console.error("Freee API Error (account_items):", accountItemsRes.status, errText);
+                return NextResponse.json({ error: "Failed to fetch account items", details: errText }, { status: accountItemsRes.status });
             }
 
             const data = await accountItemsRes.json();
-            const items = data.account_items || [];
-            allItems = [...allItems, ...items];
+            const allItems = data.account_items || [];
 
-            if (items.length < limit) {
-                hasMore = false;
-            } else {
-                offset += limit;
-            }
+            // Filter out walletables (banks, cash, etc)
+            const validItems = allItems.filter((item: any) => !item.walletable_id);
+
+            return NextResponse.json({ items: validItems });
+        } catch (fetchErr: any) {
+            console.error("Fetch Exception (account_items):", fetchErr);
+            return NextResponse.json({ error: "Fetch exception", details: fetchErr.message }, { status: 500 });
         }
-
-        // Filter out walletables (banks, cash, etc)
-        const validItems = allItems.filter((item: any) => !item.walletable_id);
-
-        return NextResponse.json({ items: validItems });
 
     } catch (error: any) {
         return NextResponse.json({ error: error.message }, { status: 500 });

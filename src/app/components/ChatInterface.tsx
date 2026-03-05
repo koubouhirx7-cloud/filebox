@@ -238,6 +238,7 @@ export default function ChatInterface({ selectedDocs, selectedDocNames = [], fol
         const [partners, setPartners] = useState<any[]>([]);
         const [isLoadingItems, setIsLoadingItems] = useState(true);
         const [partnersError, setPartnersError] = useState("");
+        const [itemsError, setItemsError] = useState("");
 
         useEffect(() => {
             const fetchItemsAndPartners = async () => {
@@ -266,6 +267,13 @@ export default function ChatInterface({ selectedDocs, selectedDocNames = [], fol
                                 setData((prev: any) => ({ ...prev, accountItemId: itemsData.items[0].id }));
                             }
                         }
+                    } else {
+                        try {
+                            const errData = await itemsRes.json();
+                            setItemsError(`取得失敗: ${errData.details || errData.error}`);
+                        } catch {
+                            setItemsError("勘定科目の取得に失敗しました");
+                        }
                     }
 
                     if (partnersRes.ok) {
@@ -281,9 +289,23 @@ export default function ChatInterface({ selectedDocs, selectedDocNames = [], fol
                             }
                         }
                     } else {
-                        setPartnersError("⚠️ 取引先の取得に失敗しました。freeeアプリ設定内で「取引先の参照」権限が許可されているかご確認ください。");
+                        try {
+                            const errData = await partnersRes.json();
+                            const errorText = errData.details || errData.error || "";
+                            // Add a fallback generic message if it fails silently
+                            if (errorText.includes("権限")) {
+                                setPartnersError("⚠️ freeeアプリ設定内で「取引先の参照」権限が許可されているかご確認ください。");
+                            } else {
+                                setPartnersError(`取得失敗: ${errorText}`);
+                            }
+                        } catch {
+                            setPartnersError("取引先の取得に失敗しました");
+                        }
                     }
-                } catch (e) { }
+                } catch (e) {
+                    setPartnersError("通信エラーが発生しました");
+                    setItemsError("通信エラーが発生しました");
+                }
                 setIsLoadingItems(false);
             };
             fetchItemsAndPartners();
@@ -377,13 +399,18 @@ export default function ChatInterface({ selectedDocs, selectedDocNames = [], fol
                         {isLoadingItems ? (
                             <div className="text-xs text-gray-500 py-2 animate-pulse">勘定科目を読み込み中...</div>
                         ) : (
-                            <SearchableSelect
-                                name="accountItemId"
-                                value={data.accountItemId || ""}
-                                onChange={handleChange}
-                                options={accountItems}
-                                placeholder="-- 勘定科目を選択 --"
-                            />
+                            <div className="space-y-2">
+                                {itemsError && (
+                                    <div className="text-xs text-red-600 bg-red-50 p-2 rounded border border-red-200">{itemsError}</div>
+                                )}
+                                <SearchableSelect
+                                    name="accountItemId"
+                                    value={data.accountItemId || ""}
+                                    onChange={handleChange}
+                                    options={accountItems}
+                                    placeholder="-- 勘定科目を選択 --"
+                                />
+                            </div>
                         )}
                     </div>
                     <div>
