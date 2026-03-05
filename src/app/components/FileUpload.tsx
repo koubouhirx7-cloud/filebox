@@ -58,17 +58,11 @@ export default function FileUpload({ onUploadSuccess, onUploadStart, folderId, f
             }
             tempIds.push(tempId);
 
-            const formData = new FormData();
-            formData.append("file", fileToUpload);
-            formData.append("folderId", folderId || "null"); // Use prop folderId, default to "null" if not provided
-            formData.append("analyzeOnUpload", analyzeOnUpload ? "true" : "false");
-
-            // Update error state temporarily to act as a progress indicator
+            // Update error state temporarily to act as progress indicator
             setError(`アップロード中... (${i + 1}/${files.length})`);
 
             // 3. Fire-and-forget the actual heavy upload in the background
-            // We'll handle success/failure for each file individually
-            uploadInBackground(fileToUpload, formData, tempId);
+            uploadInBackground(fileToUpload, folderId || null, tempId);
 
             // Throttling: To prevent Gemini API Rate Limits (20 RPM free tier)
             // Wait 7 seconds between files if we have multiple and analyzeOnUpload is true
@@ -88,43 +82,72 @@ export default function FileUpload({ onUploadSuccess, onUploadStart, folderId, f
         // For now, onUploadSuccess is called per file in uploadInBackground.
     };
 
-    const uploadInBackground = async (file: File, formData: FormData, tempId: string) => {
+    // Direct Resumable Upload
+    const uploadInBackground = async (file: File, folderId: string | null, tempId: string) => {
         try {
-            const response = await fetch("/api/upload", {
+            // Step 1: Request upload session URL from our backend
+            const initResponse = await fetch("/api/upload/url", {
                 method: "POST",
-                body: formData,
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    filename: file.name,
+                    mimeType: file.type,
+                    folderId: folderId,
+                })
             });
 
-            if (response.ok) {
-                // Background upload done! Tell Dashboard to replace tempId with real data.
-                onUploadSuccess(tempId);
-            } else {
-                let errorMsg = "不明なエラー";
-                if (response.status === 413) {
-                    errorMsg = "サーバーの受信サイズ上限（約4.5MB）を超過しました。";
-                } else if (response.status === 504) {
-                    errorMsg = "サーバーがタイムアウトしました。";
-                } else {
-                    try {
-                        const data = await response.json();
-                        if (data && data.error) errorMsg = data.error;
-                    } catch (e) {
-                        // Unable to parse JSON
-                        errorMsg = `システムエラー (Status: ${response.status})`;
-                    }
-                }
-
-                // If it failed, we still call onUploadSuccess with tempId to remove the pending visual
-                // and potentially display an error state for that specific item in the parent component.
-                onUploadSuccess(tempId);
-                console.error(`ファイル「${file.name}」のアップロード失敗: ${errorMsg}`);
-                alert(`「${file.name}」のアップロードに失敗しました\nエラー内容: ${errorMsg}`);
+            if (!initResponse.ok) {
+                const initData = await initResponse.json().catch(() => ({}));
+                throw new Error(initData.error || "アップロード用URLの取得に失敗しました");
             }
-        } catch (error: any) {
-            console.error("Upload Error:", error);
-            // If it failed, we still call onUploadSuccess with tempId to remove the pending visual
+
+            const { uploadUrl } = await initResponse.json();
+
+            // Step 2: Directly PUT the file to Google Drive
+            const uploadResponse = await fetch(uploadUrl, {
+                method: "PUT",
+                headers: {
+                    "Content-Type": file.type || "application/octet-stream"
+                },
+                body: file
+            });
+
+            if (!uploadResponse.ok) {
+                throw new Error(`Google Driveへの直接アップロードに失敗しました (${uploadResponse.status})`);
+            }
+
+            // Google Drive returns the created file metadata including ID
+            const driveData = await uploadResponse.json();
+            const driveFileId = driveData.id;
+
+            if (!driveFileId) {
+                throw new Error("アップロードは成功しましたが、Drive File IDが取得できませんでした");
+            }
+
+            // Step 3: Tell our backend to save the metadata to Prisma DB
+            const completeResponse = await fetch("/api/upload/complete", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    driveFileId,
+                    filename: file.name,
+                    mimeType: file.type,
+                    folderId: folderId
+                })
+            });
+
+            if (!completeResponse.ok) {
+                const completeData = await completeResponse.json().catch(() => ({}));
+                throw new Error(completeData.error || "メタデータの保存に失敗しました");
+            }
+
+            // Successfully uploaded and saved locally
             onUploadSuccess(tempId);
-            alert(`「${file.name}」の通信エラー: ${error.message || 'サーバーに接続できません'}`);
+
+        } catch (error: any) {
+            console.error("Direct Upload Error:", error);
+            onUploadSuccess(tempId); // Still call success to clear the pending visual
+            alert(`「${file.name}」のアップロードに失敗しました\nエラー内容: ${error.message || "不明なエラー"}`);
         }
     };
 
