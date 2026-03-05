@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
 
         let allPartners: any[] = [];
         let offset = 0;
-        const limit = 3000;
+        const limit = 100;
         let hasMore = true;
 
         while (hasMore) {

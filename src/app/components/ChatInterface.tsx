@@ -586,9 +586,13 @@ export default function ChatInterface({ selectedDocs, selectedDocNames = [], fol
 
                 {accountingDataList.length > 0 && (
                     <div className="space-y-4 pt-2">
-                        {accountingDataList.map((data, idx) => (
-                            <FreeeRegistrationCard key={idx} initialData={data} />
-                        ))}
+                        {accountingDataList.map((data, idx) => {
+                            const augmentedData = { ...data };
+                            if (!augmentedData.documentId && selectedDocs.length === 1) {
+                                augmentedData.documentId = selectedDocs[0];
+                            }
+                            return <FreeeRegistrationCard key={idx} initialData={augmentedData} />;
+                        })}
                     </div>
                 )}
             </div>
