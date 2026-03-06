@@ -12,10 +12,99 @@ export default function FileUpload({ onUploadSuccess, onUploadStart, folderId, f
     const [files, setFiles] = useState<File[]>([]);
     // Removed selectedFolderId state as it's now passed via prop folderId
     const [loading, setLoading] = useState(false);
+    const [isCompressing, setIsCompressing] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [analyzeOnUpload, setAnalyzeOnUpload] = useState(false);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const cameraInputRef = useRef<HTMLInputElement>(null);
+
+    // Browser-side image compression for fast upload and AI processing
+    const compressImage = async (file: File): Promise<File> => {
+        if (!file.type.startsWith('image/')) return file;
+
+        return new Promise((resolve) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = (event) => {
+                const img = new Image();
+                img.src = event.target?.result as string;
+                img.onload = () => {
+                    const canvas = document.createElement('canvas');
+                    // 1200x1600 is plenty for Gemini to read A4 text accurately
+                    const MAX_WIDTH = 1200;
+                    const MAX_HEIGHT = 1600;
+                    let width = img.width;
+                    let height = img.height;
+
+                    if (width > height) {
+                        if (width > MAX_WIDTH) {
+                            height = Math.round((height *= MAX_WIDTH / width));
+                            width = MAX_WIDTH;
+                        }
+                    } else {
+                        if (height > MAX_HEIGHT) {
+                            width = Math.round((width *= MAX_HEIGHT / height));
+                            height = MAX_HEIGHT;
+                        }
+                    }
+
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    if (!ctx) {
+                        resolve(file);
+                        return;
+                    }
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    // Compress with JPEG at 0.7 quality
+                    canvas.toBlob((blob) => {
+                        if (blob) {
+                            const newFile = new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".jpg", {
+                                type: 'image/jpeg',
+                                lastModified: Date.now(),
+                            });
+                            resolve(newFile);
+                        } else {
+                            resolve(file);
+                        }
+                    }, 'image/jpeg', 0.7);
+                };
+                img.onerror = () => resolve(file);
+            };
+            reader.onerror = () => resolve(file);
+        });
+    };
+
+    const handleFileSelection = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (!e.target.files || e.target.files.length === 0) return;
+
+        setIsCompressing(true);
+        setError("画像を最適化しています...");
+
+        try {
+            const newFiles = Array.from(e.target.files);
+            const processedFiles: File[] = [];
+
+            for (const file of newFiles) {
+                if (file.type.startsWith('image/')) {
+                    const compressed = await compressImage(file);
+                    processedFiles.push(compressed);
+                } else {
+                    processedFiles.push(file);
+                }
+            }
+
+            setFiles(processedFiles);
+            setError(null);
+        } catch (err) {
+            console.error("Compression error:", err);
+            setError("画像の最適化中にエラーが発生しました");
+        } finally {
+            setIsCompressing(false);
+        }
+    };
 
     // Removed useEffect for syncing folder ID as folders prop is removed
 
@@ -61,6 +150,7 @@ export default function FileUpload({ onUploadSuccess, onUploadStart, folderId, f
         // 2. Clear UI state immediately so user can upload more things instantly.
         setFiles([]);
         if (fileInputRef.current) fileInputRef.current.value = "";
+        if (cameraInputRef.current) cameraInputRef.current.value = "";
         setLoading(false); // Set loading to false after initiating all background uploads
         setError(null); // Clear general error message
 
@@ -139,24 +229,39 @@ export default function FileUpload({ onUploadSuccess, onUploadStart, folderId, f
     return (
         <div className="w-full">
             <form onSubmit={handleUpload} className="space-y-3">
-                <div className="flex items-center justify-between">
+                <div className="flex gap-2">
                     <label
                         htmlFor="file-upload"
-                        className="flex-1 border border-gray-300 rounded-full py-2 px-4 text-center cursor-pointer hover:bg-gray-50 transition-colors flex items-center justify-center text-sm font-semibold text-gray-700 bg-white shadow-sm"
+                        className="flex-1 border border-gray-300 rounded-lg py-2 px-2 text-center cursor-pointer hover:bg-gray-50 transition-colors flex items-center justify-center text-xs sm:text-sm font-semibold text-gray-700 bg-white shadow-sm"
                     >
-                        <svg className="w-4 h-4 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-                        ソースを追加
+                        <svg className="w-4 h-4 mr-1 sm:mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+                        ソース追加
+                    </label>
+                    <label
+                        htmlFor="camera-upload"
+                        className="flex-1 border border-indigo-200 rounded-lg py-2 px-2 text-center cursor-pointer hover:bg-indigo-50 transition-colors flex items-center justify-center text-xs sm:text-sm font-semibold text-indigo-700 bg-indigo-50/50 shadow-sm"
+                    >
+                        <svg className="w-4 h-4 mr-1 sm:mr-2 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                        カメラ撮影
                     </label>
                     <input
                         type="file"
                         id="file-upload"
                         className="hidden"
                         multiple
-                        onChange={(e) => {
-                            if (e.target.files) {
-                                setFiles(Array.from(e.target.files));
-                            }
-                        }}
+                        ref={fileInputRef}
+                        onChange={handleFileSelection}
+                        disabled={isCompressing || loading}
+                    />
+                    <input
+                        type="file"
+                        id="camera-upload"
+                        className="hidden"
+                        accept="image/*"
+                        capture="environment"
+                        ref={cameraInputRef}
+                        onChange={handleFileSelection}
+                        disabled={isCompressing || loading}
                     />
                 </div>
 
