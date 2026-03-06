@@ -116,11 +116,15 @@ export default function Dashboard() {
         setPendingDocs(prev => [fakeDoc, ...prev]);
     };
 
-    const handleUploadSuccess = async (fakeIdToRemove?: string) => {
+    const handleUploadSuccess = async (fakeIdToRemove?: string, realDocId?: string, analyze?: boolean) => {
         if (fakeIdToRemove) {
             setPendingDocs(prev => prev.filter(p => p.id !== fakeIdToRemove));
         }
         await fetchDocuments();
+
+        if (analyze && realDocId) {
+            setSelectedDocs(prev => new Set([...prev, realDocId]));
+        }
     };
 
     const handleRenameFolder = async (id: string, currentName: string) => {

@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from "react";
 
 interface FileUploadProps {
-    onUploadSuccess: (fakeIdToRemove?: string) => void;
+    onUploadSuccess: (fakeIdToRemove?: string, realDocId?: string, analyze?: boolean) => void;
     onUploadStart?: (fakeDoc: any) => void;
     folderId?: string;
     folderCategory?: string;
@@ -55,13 +55,7 @@ export default function FileUpload({ onUploadSuccess, onUploadStart, folderId, f
             setError(`アップロード中... (${i + 1}/${files.length})`);
 
             // 3. Fire-and-forget the actual heavy upload in the background
-            uploadInBackground(fileToUpload, folderId || null, tempId);
-
-            // Throttling: To prevent Gemini API Rate Limits (20 RPM free tier)
-            // Wait 7 seconds between files if we have multiple and analyzeOnUpload is true
-            if (analyzeOnUpload && i < files.length - 1) {
-                await sleep(7000);
-            }
+            uploadInBackground(fileToUpload, folderId || null, tempId, analyzeOnUpload);
         }
 
         // 2. Clear UI state immediately so user can upload more things instantly.
@@ -76,7 +70,7 @@ export default function FileUpload({ onUploadSuccess, onUploadStart, folderId, f
     };
 
     // Direct Resumable Upload
-    const uploadInBackground = async (file: File, folderId: string | null, tempId: string) => {
+    const uploadInBackground = async (file: File, folderId: string | null, tempId: string, shouldAnalyze: boolean) => {
         try {
             // Step 1: Request upload session URL from our backend
             const initResponse = await fetch("/api/upload/url", {
@@ -129,13 +123,11 @@ export default function FileUpload({ onUploadSuccess, onUploadStart, folderId, f
                 })
             });
 
-            if (!completeResponse.ok) {
-                const completeData = await completeResponse.json().catch(() => ({}));
-                throw new Error(completeData.error || "メタデータの保存に失敗しました");
-            }
+            const responseData = await completeResponse.json();
 
             // Successfully uploaded and saved locally
-            onUploadSuccess(tempId);
+            const realDocId = responseData.document?.id;
+            onUploadSuccess(tempId, realDocId, shouldAnalyze);
 
         } catch (error: any) {
             console.error("Direct Upload Error:", error);
