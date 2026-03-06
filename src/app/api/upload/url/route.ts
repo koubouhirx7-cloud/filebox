@@ -76,10 +76,17 @@ export async function POST(request: NextRequest) {
             parents: [targetDriveFolderId],
         };
 
+        // Ensure token is valid/refreshed
+        const tokenResponse = await oauth2Client.getAccessToken();
+        const validToken = tokenResponse.token;
+        if (!validToken) {
+            return NextResponse.json({ error: "Could not retrieve access token" }, { status: 401 });
+        }
+
         const response = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable", {
             method: "POST",
             headers: {
-                "Authorization": `Bearer ${account.access_token}`,
+                "Authorization": `Bearer ${validToken}`,
                 "Content-Type": "application/json",
                 ...(mimeType && { "X-Upload-Content-Type": mimeType })
             },
