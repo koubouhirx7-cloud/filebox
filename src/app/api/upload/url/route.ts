@@ -83,11 +83,14 @@ export async function POST(request: NextRequest) {
             return NextResponse.json({ error: "Could not retrieve access token" }, { status: 401 });
         }
 
+        const origin = request.headers.get("origin") || request.nextUrl.origin;
+
         const response = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable", {
             method: "POST",
             headers: {
                 "Authorization": `Bearer ${validToken}`,
                 "Content-Type": "application/json",
+                "Origin": origin,
                 ...(mimeType && { "X-Upload-Content-Type": mimeType })
             },
             body: JSON.stringify(uploadMetadata)
