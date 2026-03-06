@@ -485,70 +485,86 @@ export default function ChatInterface({ selectedDocs, selectedDocNames = [], fol
         let accountingDataList: any[] = [];
         let textContent = content;
 
-        // More robust JSON extraction: find any complete JSON array or object
-        // that looks like it could be our accounting data.
+        // More robust JSON extraction
         const extractJSON = (text: string) => {
             const results: any[] = [];
             let cleanText = text;
             try {
-                // First try matching standard markdown code blocks
-                const blockRegex = /```(?:json)?\n([\s\S]*?)\n```/g;
+                // 1. Try matching markdown code blocks more flexibly
+                const blockRegex = /```[a-zA-Z]*\s*([\s\S]*?)```/g;
                 let match;
                 while ((match = blockRegex.exec(text)) !== null) {
-                    const parsed = JSON.parse(match[1]);
-                    if (Array.isArray(parsed) && parsed.some(p => p.isAccountingData)) {
-                        results.push(...parsed.filter(p => p.isAccountingData));
-                        cleanText = cleanText.replace(match[0], '');
-                    } else if (parsed && typeof parsed === 'object' && parsed.isAccountingData) {
-                        results.push(parsed);
-                        cleanText = cleanText.replace(match[0], '');
+                    try {
+                        let jsonStr = match[1].trim();
+                        // AI sometimes outputs trailing commas, remove them before parsing
+                        jsonStr = jsonStr.replace(/,\s*([\]}])/g, '$1');
+                        const parsed = JSON.parse(jsonStr);
+                        if (Array.isArray(parsed)) {
+                            const validItems = parsed.filter(p => p && (p.isAccountingData === true || p.isAccountingData === "true"));
+                            if (validItems.length > 0) {
+                                results.push(...validItems);
+                                cleanText = cleanText.replace(match[0], '');
+                            }
+                        } else if (parsed && (parsed.isAccountingData === true || parsed.isAccountingData === "true")) {
+                            results.push(parsed);
+                            cleanText = cleanText.replace(match[0], '');
+                        }
+                    } catch (e) {
+                        console.error("Failed to parse code block JSON:", match[1], e);
                     }
                 }
 
-                // If strict JSON.parse failed, try a very aggressive regex-based extraction
-                // since AI often generates malformed JSON (e.g., trailing commas, unquoted keys, raw text)
+                // 2. Fallback: extract [{ ... }] arrays anywhere in text if code block regex failed
                 if (results.length === 0) {
-                    const findValue = (str: string, key: string) => {
-                        const regex = new RegExp(`"${key}"\\s*:\\s*(?:"([^"]+)"|([^,}]+))`);
-                        const match = str.match(regex);
-                        if (match) {
-                            return match[1] !== undefined ? match[1].trim() : match[2].trim();
-                        }
-                        return null;
-                    };
-
-                    // Look for blocks that look like our objects
-                    const objectBlocks = text.match(/\{[^{}]*"isAccountingData"[^{}]*\}/g);
-                    if (objectBlocks) {
-                        for (const block of objectBlocks) {
-                            try {
-                                // Try normal parse first
-                                const parsed = JSON.parse(block);
-                                if (parsed && parsed.isAccountingData) {
-                                    results.push(parsed);
-                                    cleanText = cleanText.replace(block, '');
-                                    continue;
-                                }
-                            } catch (e) {
-                                // Fallback to manual regex extraction for malformed JSON
-                                const isAccountingData = block.includes('"isAccountingData": true');
-                                if (isAccountingData) {
-                                    const amountStr = findValue(block, "amount");
-                                    const amount = amountStr ? parseInt(amountStr.replace(/[^0-9-]/g, ''), 10) : 0;
-
-                                    results.push({
-                                        isAccountingData: true,
-                                        documentId: findValue(block, "documentId") || "",
-                                        partnerName: findValue(block, "partnerName") || "",
-                                        issueDate: findValue(block, "issueDate") || "",
-                                        amount: amount,
-                                        description: findValue(block, "description") || "",
-                                        taxRate: findValue(block, "taxRate") || "10",
-                                    });
-                                    cleanText = cleanText.replace(block, '');
+                    const fallbackArrayRegex = /\[\s*\{[\s\S]*"isAccountingData"[\s\S]*\}\s*\]/g;
+                    const fallbackMatch = fallbackArrayRegex.exec(cleanText);
+                    if (fallbackMatch) {
+                        try {
+                            let jsonStr = fallbackMatch[0];
+                            jsonStr = jsonStr.replace(/,\s*([\]}])/g, '$1');
+                            const parsed = JSON.parse(jsonStr);
+                            if (Array.isArray(parsed)) {
+                                const validItems = parsed.filter(p => p && (p.isAccountingData === true || p.isAccountingData === "true"));
+                                if (validItems.length > 0) {
+                                    results.push(...validItems);
+                                    cleanText = cleanText.replace(fallbackMatch[0], '');
                                 }
                             }
+                        } catch (e) {
+                            console.error("Fallback array regex parsing failed", e);
                         }
+                    }
+                }
+
+                // 3. Last resort: aggressive greedy block extraction
+                if (results.length === 0) {
+                    const objectBlocks = cleanText.match(/\{[\s\S]*?"isAccountingData"[\s\S]*?\}/g);
+                    if (objectBlocks) {
+                        for (const block of objectBlocks) {
+                            const isAcc = block.includes('"isAccountingData"');
+                            if (isAcc) {
+                                const findValue = (str: string, key: string) => {
+                                    const regex = new RegExp(`"${key}"\\s*:\\s*(?:"([^"]+)"|([^,}]+))`);
+                                    const m = str.match(regex);
+                                    return m ? (m[1] !== undefined ? m[1].trim() : m[2].trim()) : null;
+                                };
+                                const amountStr = findValue(block, "amount");
+                                const amount = amountStr ? parseInt(amountStr.replace(/[^0-9-]/g, ''), 10) : 0;
+                                results.push({
+                                    isAccountingData: true,
+                                    documentId: findValue(block, "documentId") || "",
+                                    partnerName: findValue(block, "partnerName") || "",
+                                    issueDate: findValue(block, "issueDate") || "",
+                                    amount: amount,
+                                    description: findValue(block, "description") || "",
+                                    taxRate: findValue(block, "taxRate") || "10",
+                                });
+                                cleanText = cleanText.replace(block, '');
+                            }
+                        }
+                        // Clean up leftover empty brackets and backticks
+                        cleanText = cleanText.replace(/```[a-zA-Z]*\s*\[\s*\]\s*```/g, '');
+                        cleanText = cleanText.replace(/\[\s*\]/g, '');
                     }
                 }
 
@@ -560,15 +576,13 @@ export default function ChatInterface({ selectedDocs, selectedDocNames = [], fol
                     })
                 );
 
-                // If ALL selected documents are registered, we can safely drop all AI JSON results
-                // This prevents AI hallucinating generic documentIds or omitting them
                 if (registeredSelectedIds.size === selectedDocs.length && selectedDocs.length > 0) {
-                    return { data: [], cleanText: text }; // Return original text without stripping if it was all registered
+                    return { data: [], cleanText: text };
                 }
 
-                // If a mix, filter out any results that explicitly map to a registered document
                 const filteredResults = results.filter(r => {
-                    if (r.documentId && registeredSelectedIds.has(r.documentId)) return false;
+                    const rDocId = String(r.documentId || "").trim();
+                    if (rDocId && registeredSelectedIds.has(rDocId)) return false;
                     return true;
                 });
 
