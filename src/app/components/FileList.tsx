@@ -7,10 +7,11 @@ interface FileListProps {
     folders?: any[];
     selectedDocs: Set<string>;
     onToggleSelection: (id: string) => void;
+    onUpdateSelection?: (ids: Set<string>) => void;
     onDeleteDocument?: (id: string) => void;
 }
 
-export default function FileList({ documents, pendingDocs = [], folders = [], selectedDocs, onToggleSelection, onDeleteDocument }: FileListProps) {
+export default function FileList({ documents, pendingDocs = [], folders = [], selectedDocs, onToggleSelection, onUpdateSelection, onDeleteDocument }: FileListProps) {
     const rootDocs = documents.filter(d => !d.folderId);
 
     // State for bulk preview modal
@@ -38,17 +39,32 @@ export default function FileList({ documents, pendingDocs = [], folders = [], se
         <div className="w-full flex flex-col h-full">
             <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-bold text-gray-700">ソース ({documents.length})</h3>
-                <div className="flex gap-2">
+                <div className="flex gap-2 items-center">
+                    {onUpdateSelection && (
+                        <div className="flex bg-gray-100 rounded overflow-hidden shadow-sm mr-2">
+                            <button
+                                onClick={() => onUpdateSelection(new Set(documents.map(d => d.id)))}
+                                className="text-[10px] font-medium px-2.5 py-1 text-gray-600 hover:bg-gray-200 hover:text-gray-900 transition-colors border-r border-gray-200"
+                            >
+                                全て選択
+                            </button>
+                            <button
+                                onClick={() => onUpdateSelection(new Set())}
+                                className="text-[10px] font-medium px-2.5 py-1 text-gray-600 hover:bg-gray-200 hover:text-gray-900 transition-colors"
+                            >
+                                全て解除
+                            </button>
+                        </div>
+                    )}
                     {selectedDocs.size > 0 && (
                         <button
                             onClick={openBulkPreview}
-                            className="text-xs flex items-center bg-indigo-50 text-indigo-600 hover:bg-indigo-100 px-2 py-1 rounded transition-colors"
+                            className="text-xs flex items-center bg-indigo-50 text-indigo-600 hover:bg-indigo-100 px-2 py-1.5 rounded-md transition-colors"
                         >
                             <svg className="w-3.5 h-3.5 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
                             選択をプレビュー
                         </button>
                     )}
-                    <span className="text-xs text-gray-400 self-center">すべて選択</span>
                 </div>
             </div>
 
@@ -79,7 +95,21 @@ export default function FileList({ documents, pendingDocs = [], folders = [], se
                                 }, {})
                             ).map(([month, docs]: [string, any]) => (
                                 <div key={month}>
-                                    <div className="text-xs font-bold text-gray-500 mb-2 border-b pb-1">{month}</div>
+                                    <div className="flex justify-between items-center border-b pb-1 mb-2 mt-1">
+                                        <div className="text-xs font-bold text-gray-500">{month}</div>
+                                        {onUpdateSelection && (
+                                            <button
+                                                onClick={() => {
+                                                    const current = new Set(selectedDocs);
+                                                    docs.forEach((d: any) => current.add(d.id));
+                                                    onUpdateSelection(current);
+                                                }}
+                                                className="text-[10px] bg-blue-50 text-blue-600 hover:bg-blue-100 px-2 py-0.5 rounded-full font-medium transition-colors"
+                                            >
+                                                この月を選択
+                                            </button>
+                                        )}
+                                    </div>
                                     <div className="flex flex-col gap-2 pl-1">
                                         {docs.map((doc: any) => (
                                             <DocumentItem

@@ -72,15 +72,12 @@ export default function Dashboard() {
         fetchFolders();
     }, []);
 
-    // Auto-select all documents in the active folder when opened
+    // Auto-select behavior removed to allow manual selection (Phase 24)
     useEffect(() => {
-        if (activeFolder) {
-            const folderDocs = documents.filter(d => d.folderId === activeFolder.id);
-            setSelectedDocs(new Set(folderDocs.map(d => d.id)));
-        } else {
+        if (!activeFolder) {
             setSelectedDocs(new Set());
         }
-    }, [activeFolder, documents]);
+    }, [activeFolder]);
 
     // Keep activeFolder in sync with updated folders data
     useEffect(() => {
@@ -93,15 +90,7 @@ export default function Dashboard() {
         }
     }, [folders]);
 
-    // Auto-select all documents in active folder
-    useEffect(() => {
-        if (activeFolder) {
-            const folderDocs = documents.filter(d => d.folderId === activeFolder.id);
-            setSelectedDocs(new Set(folderDocs.map(d => d.id)));
-        } else {
-            setSelectedDocs(new Set());
-        }
-    }, [activeFolder, documents]);
+    // Duplicate auto-select block removed
 
     const handleCreateFolder = async (name: string) => {
         if (!name.trim()) return;
@@ -584,6 +573,7 @@ export default function Dashboard() {
                         folders={[]}
                         selectedDocs={selectedDocs}
                         onToggleSelection={toggleDocumentSelection}
+                        onUpdateSelection={setSelectedDocs}
                         onDeleteDocument={handleDeleteDocument}
                     />
                 </div>

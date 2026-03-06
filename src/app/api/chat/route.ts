@@ -148,12 +148,8 @@ export async function POST(request: NextRequest) {
                 },
                 filenameMessage: `(上記のファイルは「${doc.filename}」という名前のファイルです。ID=${doc.id}。freee登録済み=${doc.isRegisteredToFreee ? "true" : "false"})`
             });
-
-            // Throttle consecutive uploads to prevent Gemini 20 RPM Free Tier Limit
-            if (i < documents.length - 1) {
-                console.log("Sleeping 7 seconds to respect rate limits...");
-                await sleep(7000);
-            }
+            // uploadResults.push(...) ...
+            // Removed the 7-second Throttle here to leverage Gemini's Paid Plan capacity
         }
 
         for (const result of uploadResults) {
