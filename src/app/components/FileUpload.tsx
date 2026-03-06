@@ -96,8 +96,11 @@ export default function FileUpload({ onUploadSuccess, onUploadStart, folderId, f
                 }
             }
 
-            setFiles(processedFiles);
+            setFiles(prev => [...prev, ...processedFiles]);
             setError(null);
+
+            // clear the input so the same file/camera action can be triggered again easily
+            e.target.value = "";
         } catch (err) {
             console.error("Compression error:", err);
             setError("画像の最適化中にエラーが発生しました");
