@@ -21,7 +21,7 @@ export const authOptions: NextAuthOptions = {
     ],
     adapter: PrismaAdapter(prisma),
     secret: process.env.NEXTAUTH_SECRET,
-    session: { strategy: "jwt" },
+    session: { strategy: "jwt", maxAge: 24 * 60 * 60 }, // 24 hours
     callbacks: {
         async signIn({ user, account }) {
             if (account && account.provider === 'google') {
