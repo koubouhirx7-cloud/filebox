@@ -23,29 +23,40 @@ export const authOptions: NextAuthOptions = {
     secret: process.env.NEXTAUTH_SECRET,
     session: { strategy: "jwt" },
     callbacks: {
-        async jwt({ token, account }) {
-            // Persist the OAuth access_token to the token right after signin
-            if (account) {
-                token.accessToken = account.access_token;
-                
-                // Update the Account in the database with the new tokens on re-login
+        async signIn({ user, account }) {
+            if (account && account.provider === 'google') {
                 try {
-                    await prisma.account.update({
+                    // Update the Account in the database with the new tokens on re-login
+                    // Make sure the account exists first to prevent race conditions during first-time signups
+                    const existingAccount = await prisma.account.findUnique({
                         where: {
                             provider_providerAccountId: {
                                 provider: account.provider,
                                 providerAccountId: account.providerAccountId,
                             },
                         },
-                        data: {
-                            access_token: account.access_token,
-                            expires_at: account.expires_at,
-                            ...(account.refresh_token && { refresh_token: account.refresh_token }),
-                        },
                     });
+
+                    if (existingAccount) {
+                        await prisma.account.update({
+                            where: { id: existingAccount.id },
+                            data: {
+                                access_token: account.access_token,
+                                expires_at: account.expires_at,
+                                ...(account.refresh_token && { refresh_token: account.refresh_token }),
+                            },
+                        });
+                    }
                 } catch (error) {
-                    console.error("Failed to update account tokens:", error);
+                    console.error("Failed to update account tokens during signIn:", error);
                 }
+            }
+            return true;
+        },
+        async jwt({ token, account }) {
+            // Persist the OAuth access_token to the token right after signin
+            if (account) {
+                token.accessToken = account.access_token;
             }
             return token;
         },
