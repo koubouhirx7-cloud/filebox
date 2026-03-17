@@ -21,7 +21,7 @@ export const authOptions: NextAuthOptions = {
     ],
     adapter: PrismaAdapter(prisma),
     secret: process.env.NEXTAUTH_SECRET,
-    session: { strategy: "jwt", maxAge: 24 * 60 * 60 }, // 24 hours
+    session: { strategy: "jwt" },
     callbacks: {
         async jwt({ token, account }) {
             // Persist the OAuth access_token to the token right after signin
