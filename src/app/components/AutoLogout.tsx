@@ -8,10 +8,11 @@ export default function AutoLogout({ timeoutMinutes = 60 }: { timeoutMinutes?: n
     const resetTimer = () => {
         if (timerRef.current) clearTimeout(timerRef.current);
         
-        timerRef.current = setTimeout(() => {
+        timerRef.current = setTimeout(async () => {
             // User has been idle for the specified minutes
             console.log(`User inactive for ${timeoutMinutes} minutes. Logging out...`);
-            signOut({ callbackUrl: "/" });
+            await signOut({ redirect: false });
+            window.location.href = "https://accounts.google.com/Logout";
         }, timeoutMinutes * 60 * 1000);
     };
 
