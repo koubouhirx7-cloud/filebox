@@ -74,6 +74,9 @@ export async function PUT(
 
     } catch (error: any) {
         console.error("Error updating folder:", error);
+        if (error.message === "invalid_grant") {
+            return NextResponse.json({ error: "Google Driveの認証期限が切れました。一度ログアウトし、再度ログインしてください。" }, { status: 401 });
+        }
         return NextResponse.json({ error: error.message || "Failed to update folder" }, { status: 500 });
     }
 }
@@ -138,6 +141,9 @@ export async function DELETE(
 
     } catch (error: any) {
         console.error("Error deleting folder:", error);
+        if (error.message === "invalid_grant") {
+            return NextResponse.json({ error: "Google Driveの認証期限が切れました。一度ログアウトし、再度ログインしてください。" }, { status: 401 });
+        }
         return NextResponse.json({ error: error.message || "Failed to delete folder" }, { status: 500 });
     }
 }

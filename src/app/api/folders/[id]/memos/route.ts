@@ -41,6 +41,9 @@ export async function POST(
 
     } catch (error: any) {
         console.error("Error creating memo:", error);
+        if (error.message === "invalid_grant") {
+            return NextResponse.json({ error: "Google Driveの認証期限が切れました。一度ログアウトし、再度ログインしてください。" }, { status: 401 });
+        }
         return NextResponse.json({ error: error.message || "Server Error" }, { status: 500 });
     }
 }

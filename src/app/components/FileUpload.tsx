@@ -4,11 +4,12 @@ import { useState, useEffect, useRef } from "react";
 interface FileUploadProps {
     onUploadSuccess: (fakeIdToRemove?: string, realDocId?: string, analyze?: boolean) => void;
     onUploadStart?: (fakeDoc: any) => void;
+    onTitleGenerated?: (fakeId: string, newTitle: string) => void;
     folderId?: string;
     folderCategory?: string;
 }
 
-export default function FileUpload({ onUploadSuccess, onUploadStart, folderId, folderCategory }: FileUploadProps) {
+export default function FileUpload({ onUploadSuccess, onUploadStart, onTitleGenerated, folderId, folderCategory }: FileUploadProps) {
     const [files, setFiles] = useState<File[]>([]);
     // Removed selectedFolderId state as it's now passed via prop folderId
     const [loading, setLoading] = useState(false);
@@ -165,12 +166,50 @@ export default function FileUpload({ onUploadSuccess, onUploadStart, folderId, f
     // Direct Resumable Upload
     const uploadInBackground = async (file: File, folderId: string | null, tempId: string, shouldAnalyze: boolean) => {
         try {
+            let uploadFilename = file.name;
+
+            // --- Phase 28: Configure Automatic Title For Images ---
+            if (file.type.startsWith('image/')) {
+                try {
+                    const base64 = await new Promise<string>((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onloadend = () => resolve(reader.result as string);
+                        reader.onerror = reject;
+                        reader.readAsDataURL(file);
+                    });
+
+                    const titleRes = await fetch("/api/generate-title", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ image: base64, mimeType: file.type })
+                    });
+
+                    if (titleRes.ok) {
+                        const { title } = await titleRes.json();
+                        if (title) {
+                            const ext = file.name.split('.').pop() || 'jpg';
+                            uploadFilename = `${title}.${ext}`;
+                            if (onTitleGenerated) {
+                                onTitleGenerated(tempId, uploadFilename);
+                            }
+                        }
+                    } else {
+                        const errData = await titleRes.json().catch(() => ({}));
+                        console.error("AI Title generation HTTP Error:", errData);
+                        alert(`タイトル生成に失敗しました: ${errData.details || errData.error || titleRes.statusText}`);
+                    }
+                } catch (e: any) {
+                    console.error("AI Title generation caught exception:", e);
+                    alert(`タイトル生成処理でエラーが発生しました: ${e.message || String(e)}`);
+                }
+            }
+
             // Step 1: Request upload session URL from our backend
             const initResponse = await fetch("/api/upload/url", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    filename: file.name,
+                    filename: uploadFilename,
                     mimeType: file.type,
                     folderId: folderId,
                 })
@@ -210,7 +249,7 @@ export default function FileUpload({ onUploadSuccess, onUploadStart, folderId, f
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     driveFileId,
-                    filename: file.name,
+                    filename: uploadFilename,
                     mimeType: file.type,
                     folderId: folderId
                 })

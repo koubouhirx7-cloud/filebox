@@ -33,6 +33,9 @@ export async function GET(request: NextRequest) {
 
         return NextResponse.json({ messages });
     } catch (error: any) {
+        if (error.message === "invalid_grant") {
+            return NextResponse.json({ error: "Google Driveの認証期限が切れました。一度ログアウトし、再度ログインしてください。" }, { status: 401 });
+        }
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }
@@ -244,6 +247,9 @@ export async function POST(request: NextRequest) {
         for (const tFile of tempFiles) {
             try { await fs.unlink(tFile); } catch (e) { }
         }
+        if (error.message === "invalid_grant") {
+            return NextResponse.json({ error: "Google Driveの認証期限が切れました。一度ログアウトし、再度ログインしてください。" }, { status: 401 });
+        }
         return NextResponse.json({ error: error.message || "Failed to process chat" }, { status: 500 });
     }
 }
@@ -272,6 +278,9 @@ export async function DELETE(request: NextRequest) {
 
         return NextResponse.json({ success: true });
     } catch (error: any) {
+        if (error.message === "invalid_grant") {
+            return NextResponse.json({ error: "Google Driveの認証期限が切れました。一度ログアウトし、再度ログインしてください。" }, { status: 401 });
+        }
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }

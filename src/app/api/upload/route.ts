@@ -245,6 +245,9 @@ export async function POST(request: NextRequest) {
             }
         }
 
+        if (error.message === "invalid_grant") {
+            return NextResponse.json({ error: "Google Driveの認証期限が切れました。一度ログアウトし、再度ログインしてください。" }, { status: 401 });
+        }
         return NextResponse.json({ error: error.message || "Failed to process file with AI" }, { status: 500 });
     }
 }

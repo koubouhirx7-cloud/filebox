@@ -5,6 +5,7 @@ import LoginButton from "./components/LoginButton";
 import LogoutButton from "./components/LogoutButton";
 import DisconnectFreeeButton from "./components/DisconnectFreeeButton";
 import Dashboard from "./components/Dashboard";
+import AutoLogout from "./components/AutoLogout";
 
 export default async function Home() {
     const session = await getServerSession(authOptions);
@@ -66,6 +67,7 @@ export default async function Home() {
                     </div>
                 ) : (
                     <div className="w-full text-left">
+                        <AutoLogout timeoutMinutes={60} />
                         <div className="mb-6 bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-lg shadow-sm">
                             <p className="text-sm text-blue-700">
                                 こんにちは <span className="font-semibold">{session.user?.name}</span> さん！安全にファイルをアップロードしてGeminiで解析できます。

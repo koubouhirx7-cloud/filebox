@@ -62,6 +62,9 @@ export async function GET(request: NextRequest) {
         }
 
     } catch (error: any) {
+        if (error.message === "invalid_grant") {
+            return NextResponse.json({ error: "Google Driveの認証期限が切れました。一度ログアウトし、再度ログインしてください。" }, { status: 401 });
+        }
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
 }

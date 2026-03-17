@@ -70,6 +70,9 @@ export async function GET(
             return NextResponse.json({ error: "ファイルはGoogle Drive上で既に削除されています。リストから整理しました。" }, { status: 404 });
         }
 
+        if (error.message === "invalid_grant") {
+            return NextResponse.json({ error: "Google Driveの認証期限が切れました。一度ログアウトし、再度ログインしてください。" }, { status: 401 });
+        }
         return NextResponse.json({ error: error.message || "Failed to fetch file link from Drive" }, { status: 500 });
     }
 }

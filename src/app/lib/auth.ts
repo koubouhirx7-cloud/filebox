@@ -21,12 +21,31 @@ export const authOptions: NextAuthOptions = {
     ],
     adapter: PrismaAdapter(prisma),
     secret: process.env.NEXTAUTH_SECRET,
-    session: { strategy: "jwt" },
+    session: { strategy: "jwt", maxAge: 24 * 60 * 60 }, // 24 hours
     callbacks: {
         async jwt({ token, account }) {
             // Persist the OAuth access_token to the token right after signin
             if (account) {
                 token.accessToken = account.access_token;
+                
+                // Update the Account in the database with the new tokens on re-login
+                try {
+                    await prisma.account.update({
+                        where: {
+                            provider_providerAccountId: {
+                                provider: account.provider,
+                                providerAccountId: account.providerAccountId,
+                            },
+                        },
+                        data: {
+                            access_token: account.access_token,
+                            expires_at: account.expires_at,
+                            ...(account.refresh_token && { refresh_token: account.refresh_token }),
+                        },
+                    });
+                } catch (error) {
+                    console.error("Failed to update account tokens:", error);
+                }
             }
             return token;
         },

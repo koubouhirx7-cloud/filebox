@@ -116,6 +116,10 @@ export default function Dashboard() {
         setPendingDocs(prev => [fakeDoc, ...prev]);
     };
 
+    const handleTitleGenerated = (fakeId: string, newTitle: string) => {
+        setPendingDocs(prev => prev.map(p => p.id === fakeId ? { ...p, filename: newTitle } : p));
+    };
+
     const handleUploadSuccess = async (fakeIdToRemove?: string, realDocId?: string, analyze?: boolean) => {
         if (fakeIdToRemove) {
             setPendingDocs(prev => prev.filter(p => p.id !== fakeIdToRemove));
@@ -586,6 +590,7 @@ export default function Dashboard() {
                     <FileUpload
                         onUploadSuccess={handleUploadSuccess}
                         onUploadStart={handleUploadStart}
+                        onTitleGenerated={handleTitleGenerated}
                         folderId={activeFolder.id}
                         folderCategory={activeFolder.category}
                     />
